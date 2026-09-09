@@ -7,6 +7,7 @@
 mod app;
 mod audio;
 mod core;
+mod graph;
 mod input;
 mod params;
 mod ui;
