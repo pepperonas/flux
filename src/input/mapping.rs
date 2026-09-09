@@ -100,6 +100,14 @@ impl HeldSet {
         self.held.contains(id)
     }
 
+    /// The controls currently held, in no particular order.
+    ///
+    /// Order is genuinely arbitrary and safe to be: the only caller releases
+    /// every one of them, and note-offs for distinct notes commute.
+    pub fn iter(&self) -> impl Iterator<Item = ControlId> + '_ {
+        self.held.iter().copied()
+    }
+
     pub fn len(&self) -> usize {
         self.held.len()
     }

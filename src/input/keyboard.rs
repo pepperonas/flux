@@ -141,15 +141,18 @@ impl KeyboardSource {
         }
     }
 
-    /// Process one physical key transition, already translated to a FLUX
-    /// `KeyCode`: update `held`, resolve it against `mapping`, and route each
-    /// resulting action to the audio thread or to local state. Factored out
-    /// of `pump` so the keyboard-to-action wiring - the same wiring the
-    /// octave/held-note interaction depends on - is exercisable without a
-    /// live `egui::Context`.
-    fn on_key(&mut self, code: KeyCode, pressed: bool, mapping: &Mapping, telemetry: &Telemetry) {
-        let id = ControlId::Keyboard(code);
-
+    /// Process one control transition: update `held`, resolve it against
+    /// `mapping`, and route each resulting action to the audio thread or to
+    /// local state. Factored out of `pump` so the keyboard-to-action wiring -
+    /// the same wiring the octave/held-note interaction depends on - is
+    /// exercisable without a live `egui::Context`.
+    fn on_control(
+        &mut self,
+        id: ControlId,
+        pressed: bool,
+        mapping: &Mapping,
+        telemetry: &Telemetry,
+    ) {
         if pressed {
             self.held.press(id);
         } else {
@@ -170,10 +173,33 @@ impl KeyboardSource {
         }
     }
 
-    /// Read this frame's key events and turn them into engine commands.
+    /// Let go of everything currently held, as though every one of those
+    /// controls had been released.
+    ///
+    /// The operating system stops delivering key events to a window that has
+    /// lost focus, and neither egui nor winit synthesises the releases that
+    /// never arrive - egui's own `keys_down` simply keeps them. Without this,
+    /// Cmd-Tab while holding a chord leaves it sounding with no note-off ever
+    /// sent, and the instrument has no panic action to recover with
+    /// (ARCHITECTURE SS3, which is why `resolve` records the started note in
+    /// the first place).
+    ///
+    /// Every control is let go through the ordinary release path rather than
+    /// by inventing note-offs here, so the notes turned off are exactly the
+    /// ones the presses started - including after an octave change, which is
+    /// the entire reason `HeldSet` remembers them.
+    pub fn release_all(&mut self, mapping: &Mapping, telemetry: &Telemetry) {
+        let held: Vec<ControlId> = self.held.iter().collect();
+        for id in held {
+            self.on_control(id, false, mapping, telemetry);
+        }
+    }
+
+    /// Read this frame's input and turn it into engine commands.
     pub fn pump(&mut self, ctx: &egui::Context, mapping: &Mapping, telemetry: &Telemetry) {
-        let events: Vec<(egui::Key, bool, bool)> = ctx.input(|i| {
-            i.events
+        let (keys, focused) = ctx.input(|i| {
+            let keys: Vec<(KeyCode, bool)> = i
+                .events
                 .iter()
                 .filter_map(|e| match e {
                     egui::Event::Key {
@@ -181,20 +207,35 @@ impl KeyboardSource {
                         pressed,
                         repeat,
                         ..
-                    } => Some((*key, *pressed, *repeat)),
+                    } => {
+                        // The operating system repeats a held key. A synth
+                        // must not restart the note; the key is still down
+                        // and the note is still sounding.
+                        if *repeat {
+                            return None;
+                        }
+                        from_egui(*key).map(|code| (code, *pressed))
+                    }
                     _ => None,
                 })
-                .collect()
+                .collect();
+            (keys, i.focused)
         });
 
-        for (key, pressed, repeat) in events {
-            // The operating system repeats a held key. A synth must not restart
-            // the note; the key is still down and the note is still sounding.
-            if repeat {
-                continue;
-            }
-            let Some(code) = from_egui(key) else { continue };
-            self.on_key(code, pressed, mapping, telemetry);
+        for (code, pressed) in keys {
+            self.on_control(ControlId::Keyboard(code), pressed, mapping, telemetry);
+        }
+
+        // Anything still held when a frame ends without window focus is let
+        // go of. The end-of-frame state is used rather than the
+        // `WindowFocused(false)` event so that the order events arrived in
+        // cannot matter: a key press that lands in the same frame as the
+        // focus loss is caught whichever side of it the press fell on, and a
+        // window that loses and regains focus inside one frame keeps what it
+        // was holding. It is also self-healing - any unfocused frame at all
+        // clears a release that went missing for some other reason.
+        if !focused {
+            self.release_all(mapping, telemetry);
         }
     }
 }
@@ -493,5 +534,227 @@ mod tests {
             telemetry.commands.pop().is_none(),
             "an OS key-repeat must not produce a second NoteOn"
         );
+    }
+    /// One frame in which the window is not focused. egui-winit sets both
+    /// `RawInput::focused` and pushes `Event::WindowFocused`, so both are
+    /// modelled here.
+    fn run_unfocused_frame(
+        ctx: &egui::Context,
+        source: &mut KeyboardSource,
+        mapping: &Mapping,
+        telemetry: &Telemetry,
+        mut events: Vec<egui::Event>,
+    ) {
+        events.push(egui::Event::WindowFocused(false));
+        let raw = egui::RawInput {
+            events,
+            focused: false,
+            ..Default::default()
+        };
+        let _ = ctx.run(raw, |ctx| source.pump(ctx, mapping, telemetry));
+    }
+
+    /// Every command the telemetry queue is holding, in arrival order.
+    fn drain(telemetry: &Telemetry) -> Vec<AudioCommand> {
+        let mut out = Vec::new();
+        while let Some(c) = telemetry.commands.pop() {
+            out.push(c);
+        }
+        out
+    }
+
+    #[test]
+    fn losing_window_focus_releases_every_held_note() {
+        // Cmd-Tab away from a held chord and the operating system simply
+        // stops delivering key events; the releases never arrive, and egui
+        // does not invent them - its own `keys_down` keeps the keys down
+        // forever. Before this was handled, the chord droned on with no
+        // note-off ever sent and no panic action to recover with.
+        let m = default_mapping();
+        let telemetry = Telemetry::new(32);
+        let mut source = KeyboardSource::default();
+        let ctx = egui::Context::default();
+
+        run_frame(
+            &ctx,
+            &mut source,
+            &m,
+            &telemetry,
+            vec![
+                key_event(egui::Key::A, true),
+                key_event(egui::Key::D, true),
+                key_event(egui::Key::G, true),
+            ],
+        );
+        let started = drain(&telemetry);
+        assert_eq!(started.len(), 3, "the chord did not start: {started:?}");
+
+        run_unfocused_frame(&ctx, &mut source, &m, &telemetry, vec![]);
+        let stopped = drain(&telemetry);
+        // The order is whatever the held set iterates in, which is arbitrary
+        // and harmless - note-offs for distinct notes commute.
+        let mut notes: Vec<u8> = stopped
+            .iter()
+            .map(|c| match c {
+                AudioCommand::Act(Action::NoteOff { note }) => *note,
+                other => panic!("focus loss produced {other:?}, not a note-off"),
+            })
+            .collect();
+        notes.sort_unstable();
+        assert_eq!(
+            notes,
+            vec![60, 64, 67],
+            "focus loss left notes sounding with no note-off"
+        );
+        assert!(
+            source.held.is_empty(),
+            "the keys are still recorded as held after focus was lost"
+        );
+    }
+
+    #[test]
+    fn focus_loss_releases_the_note_that_was_started_not_the_one_the_octave_now_implies() {
+        // The same guarantee `releasing_a_held_note_after_an_octave_shift_
+        // stops_the_note_that_was_started` pins for a real release. It holds
+        // here for free only because focus loss goes through the ordinary
+        // release path; a hand-written note-off loop that recomputed the note
+        // from the current octave would strand note 60 and turn off note 72,
+        // which was never on.
+        let m = default_mapping();
+        let telemetry = Telemetry::new(32);
+        let mut source = KeyboardSource::default();
+        let ctx = egui::Context::default();
+
+        run_frame(
+            &ctx,
+            &mut source,
+            &m,
+            &telemetry,
+            vec![key_event(egui::Key::A, true)],
+        );
+        run_frame(
+            &ctx,
+            &mut source,
+            &m,
+            &telemetry,
+            vec![key_event(egui::Key::X, true)],
+        );
+        assert_eq!(source.play.octave, 5);
+        drain(&telemetry);
+
+        run_unfocused_frame(&ctx, &mut source, &m, &telemetry, vec![]);
+        assert_eq!(
+            drain(&telemetry),
+            vec![AudioCommand::Act(Action::NoteOff { note: 60 })],
+            "focus loss must stop the note the press actually started"
+        );
+    }
+
+    #[test]
+    fn a_key_pressed_in_the_same_frame_as_the_focus_loss_does_not_survive_it() {
+        // The window can lose focus in the same frame a key goes down, and
+        // the two can arrive in either order. Reading the frame's focus state
+        // after the keys have been processed, rather than acting on the
+        // event where it happens to sit in the queue, means neither ordering
+        // can leave a note that nothing will ever turn off.
+        for press_first in [true, false] {
+            let m = default_mapping();
+            let telemetry = Telemetry::new(32);
+            let mut source = KeyboardSource::default();
+            let ctx = egui::Context::default();
+
+            let mut events = vec![key_event(egui::Key::A, true)];
+            if press_first {
+                run_unfocused_frame(&ctx, &mut source, &m, &telemetry, events);
+            } else {
+                events.insert(0, egui::Event::WindowFocused(false));
+                let raw = egui::RawInput {
+                    events,
+                    focused: false,
+                    ..Default::default()
+                };
+                let _ = ctx.run(raw, |ctx| source.pump(ctx, &m, &telemetry));
+            }
+
+            assert_eq!(
+                drain(&telemetry),
+                vec![
+                    AudioCommand::Act(Action::NoteOn {
+                        note: 60,
+                        velocity: source.play.velocity
+                    }),
+                    AudioCommand::Act(Action::NoteOff { note: 60 }),
+                ],
+                "press_first={press_first}: a key pressed as focus was lost \
+                 was left sounding"
+            );
+            assert!(source.held.is_empty(), "press_first={press_first}");
+        }
+    }
+
+    #[test]
+    fn focus_lost_and_regained_inside_one_frame_keeps_what_was_held() {
+        // The reason the end-of-frame state decides this rather than the
+        // `WindowFocused(false)` event: acting on the event would drop a
+        // chord the player never actually lost, because the window was
+        // focused again before the frame was even drawn.
+        let m = default_mapping();
+        let telemetry = Telemetry::new(32);
+        let mut source = KeyboardSource::default();
+        let ctx = egui::Context::default();
+
+        run_frame(
+            &ctx,
+            &mut source,
+            &m,
+            &telemetry,
+            vec![key_event(egui::Key::A, true)],
+        );
+        drain(&telemetry);
+
+        let raw = egui::RawInput {
+            events: vec![
+                egui::Event::WindowFocused(false),
+                egui::Event::WindowFocused(true),
+            ],
+            focused: true,
+            ..Default::default()
+        };
+        let _ = ctx.run(raw, |ctx| source.pump(ctx, &m, &telemetry));
+
+        assert!(
+            drain(&telemetry).is_empty(),
+            "a chord was dropped over a focus flicker inside a single frame"
+        );
+        assert!(source.held.contains(&ControlId::Keyboard(KeyCode::A)));
+    }
+
+    #[test]
+    fn regaining_focus_on_its_own_starts_nothing() {
+        // The counterpart: `WindowFocused(true)` must not be mistaken for
+        // input. The keys may still be physically down, but FLUX has already
+        // let go of them, and resurrecting notes the player cannot see would
+        // be worse than making them press again.
+        let m = default_mapping();
+        let telemetry = Telemetry::new(32);
+        let mut source = KeyboardSource::default();
+        let ctx = egui::Context::default();
+
+        run_unfocused_frame(
+            &ctx,
+            &mut source,
+            &m,
+            &telemetry,
+            vec![key_event(egui::Key::A, true)],
+        );
+        drain(&telemetry);
+        run_frame(
+            &ctx,
+            &mut source,
+            &m,
+            &telemetry,
+            vec![egui::Event::WindowFocused(true)],
+        );
+        assert!(drain(&telemetry).is_empty());
     }
 }
