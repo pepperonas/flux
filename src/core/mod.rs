@@ -4,6 +4,7 @@
 //! that touches the outside world. That constraint is what keeps the test suite
 //! fast and what lets every musical rule be asserted directly.
 
+pub mod event;
 pub mod ids;
 pub mod music;
 pub mod quantize;
