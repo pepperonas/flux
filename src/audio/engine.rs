@@ -261,13 +261,19 @@ impl AudioEngine {
         // which is the number a meter and a clip warning need: the block that
         // actually leaves the graph has already been squashed towards
         // tanh(1.5) = 0.905 and can never say how hard the clipper is working.
-        // If a terminal module ever declines to measure one, fall back to what
-        // did leave, rather than reporting silence.
-        let peak = self.modules[self.output_module].peak().unwrap_or_else(|| {
-            self.out[..frames]
-                .iter()
-                .fold(0.0f32, |a, b| a.max(b.abs()))
-        });
+        // If a terminal module ever declines to measure one - or is not where
+        // it was, which cannot happen but must not panic in a callback if it
+        // ever did - fall back to what actually left, rather than reporting
+        // silence.
+        let peak = self
+            .modules
+            .get(self.output_module)
+            .and_then(|m| m.peak())
+            .unwrap_or_else(|| {
+                self.out[..frames]
+                    .iter()
+                    .fold(0.0f32, |a, b| a.max(b.abs()))
+            });
         self.telemetry.set_peak(peak);
 
         self.telemetry
