@@ -87,6 +87,12 @@ impl Telemetry {
         self.dsp_load_permille.load(Ordering::Relaxed) as f32 / 10.0
     }
 
+    /// One block that was not delivered in time.
+    ///
+    /// Counted by the audio host when a callback takes longer than the block
+    /// it was asked to fill - see `engine::host::callback_cost` for why this
+    /// is measured rather than asked of the backend, and for what it does not
+    /// include.
     pub fn note_underrun(&self) {
         self.underruns.fetch_add(1, Ordering::Relaxed);
     }

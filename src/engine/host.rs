@@ -1,5 +1,6 @@
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
+use std::time::Duration;
 
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 
@@ -55,6 +56,43 @@ impl ObservedBufferSize {
             0 => None,
             n => Some(n),
         }
+    }
+}
+
+/// What one finished callback cost: the share of its own deadline it used, in
+/// permille, and whether it went past it.
+///
+/// A callback that takes longer than the block it was asked to fill is an
+/// underrun. The device has a fixed amount of audio left when it calls us and
+/// a fixed amount of time before it needs more; overrunning that is precisely
+/// the moment it runs dry. This is measured here rather than asked of the
+/// backend because CPAL's error callback does not report underruns on this
+/// platform - `error_callback` is invoked nowhere in cpal 0.15's desktop
+/// CoreAudio backend at all - so a counter wired to it would be exactly as
+/// permanently zero as the unwired one it replaced.
+///
+/// It measures our own overruns and only those. The operating system can also
+/// drop a buffer for reasons we never see, and those are not counted; the
+/// number is a floor, not a total.
+fn callback_cost(frames: usize, sample_rate: f32, used: Duration) -> (u32, bool) {
+    if frames == 0 || sample_rate <= 0.0 {
+        // A callback that asked for no audio, or a device claiming no sample
+        // rate, has no deadline to miss - and dividing by it would report an
+        // infinite load and a phantom underrun on every block.
+        return (0, false);
+    }
+    let budget = frames as f32 / sample_rate;
+    let ratio = used.as_secs_f32() / budget;
+    ((ratio * 1000.0) as u32, ratio > 1.0)
+}
+
+/// Publish what a finished callback cost. Called from the audio thread:
+/// two relaxed atomic stores at most, no allocation, no locking.
+fn record_callback_cost(telemetry: &Telemetry, frames: usize, sample_rate: f32, used: Duration) {
+    let (permille, missed_deadline) = callback_cost(frames, sample_rate, used);
+    telemetry.set_dsp_load(permille);
+    if missed_deadline {
+        telemetry.note_underrun();
     }
 }
 
@@ -143,9 +181,7 @@ impl AudioHost {
                         *sample = v;
                     }
                 }
-                let budget = frames as f32 / sample_rate;
-                let used = started.elapsed().as_secs_f32();
-                cb_telemetry.set_dsp_load(((used / budget) * 1000.0) as u32);
+                record_callback_cost(&cb_telemetry, frames, sample_rate, started.elapsed());
             },
             move |err| {
                 // A device error must never take the process down. The interface
@@ -171,8 +207,9 @@ impl AudioHost {
                             // Mirrors the primary callback above: measure and
                             // render the same way, so a device that only
                             // accepts its own default buffer still gets
-                            // honest peak and DSP-load telemetry rather than
-                            // a fallback path that quietly reports nothing.
+                            // honest peak, DSP-load and underrun telemetry
+                            // rather than a fallback path that quietly
+                            // reports nothing.
                             let started = std::time::Instant::now();
                             let frames = data.len() / channels;
                             observed2.record(frames as u32);
@@ -184,9 +221,12 @@ impl AudioHost {
                                     *sample = v;
                                 }
                             }
-                            let budget = frames as f32 / sample_rate;
-                            let used = started.elapsed().as_secs_f32();
-                            cb_telemetry2.set_dsp_load(((used / budget) * 1000.0) as u32);
+                            record_callback_cost(
+                                &cb_telemetry2,
+                                frames,
+                                sample_rate,
+                                started.elapsed(),
+                            );
                         },
                         move |err| log::error!("audio stream error: {err}"),
                         None,
@@ -275,5 +315,75 @@ mod tests {
     fn the_known_state_formats_as_a_real_number() {
         assert_eq!(describe_buffer_frames(Some(512)), "512 frames");
         assert_eq!(describe_latency_ms(Some(11.6)), "11.6 ms");
+    }
+    #[test]
+    fn a_callback_that_finished_in_time_is_not_an_underrun() {
+        // 256 frames at 48 kHz is a 5.33 ms deadline.
+        let (permille, missed) = callback_cost(256, 48_000.0, Duration::from_micros(1_333));
+        assert!(!missed);
+        // A quarter of the budget. The tolerance is float rounding on a
+        // deadline of 5333.33 us, not slack in the property.
+        assert!(
+            (248..=251).contains(&permille),
+            "reported {permille} permille"
+        );
+    }
+
+    #[test]
+    fn a_callback_that_overran_its_block_is_an_underrun() {
+        // Taking longer to fill a block than the block lasts is exactly the
+        // moment the device runs dry. This is measured here because cpal's
+        // error callback reports nothing at all on this platform.
+        let (permille, missed) = callback_cost(256, 48_000.0, Duration::from_micros(10_666));
+        assert!(missed);
+        assert!(
+            (1_995..=2_005).contains(&permille),
+            "twice the budget should read about 200 %, got {permille} permille"
+        );
+    }
+
+    #[test]
+    fn a_callback_that_used_exactly_its_budget_is_not_an_underrun() {
+        // The boundary belongs to the good side: a block delivered on the
+        // deadline was delivered.
+        //
+        // 48 frames at 48 kHz is chosen so the boundary is actually
+        // reachable. The deadline is a float division, so most frame counts
+        // give a budget no `Duration` lands on exactly - at 256 frames the
+        // closest available duration comes out at a ratio of 0.99999994 and
+        // the `>` and `>=` forms of the test cannot be told apart. Here
+        // `48.0/48000.0` and `Duration::from_millis(1).as_secs_f32()` are the
+        // same f32, and the ratio is exactly 1.0.
+        let (permille, missed) = callback_cost(48, 48_000.0, Duration::from_millis(1));
+        assert_eq!(
+            permille, 1000,
+            "this case is meant to be exactly on the line"
+        );
+        assert!(!missed, "a block delivered on its deadline was delivered");
+    }
+
+    #[test]
+    fn a_zero_length_callback_is_not_an_underrun() {
+        // No backend is expected to do this, but dividing by its deadline
+        // would produce an infinite load and a permanent stream of phantom
+        // underruns, which is a worse answer than "nothing was asked for".
+        let (permille, missed) = callback_cost(0, 48_000.0, Duration::from_millis(5));
+        assert!(!missed);
+        assert_eq!(permille, 0);
+    }
+
+    #[test]
+    fn an_overrun_reaches_the_counter_the_diagnostics_view_reads() {
+        // The counter existed with no caller at all, so the diagnostics view
+        // rendered "Underruns: 0" as a fact about the device rather than a
+        // fact about the wiring.
+        let t = Telemetry::new(4);
+        assert_eq!(t.underruns(), 0);
+        record_callback_cost(&t, 256, 48_000.0, Duration::from_micros(1_333));
+        assert_eq!(t.underruns(), 0, "a callback within budget was counted");
+        assert!((t.dsp_load_percent() - 25.0).abs() < 0.5);
+        record_callback_cost(&t, 256, 48_000.0, Duration::from_micros(10_666));
+        assert_eq!(t.underruns(), 1, "an overrun was not counted");
+        assert!((t.dsp_load_percent() - 200.0).abs() < 0.5);
     }
 }
