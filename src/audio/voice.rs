@@ -78,12 +78,37 @@ impl Default for Voice {
 
 impl Voice {
     pub fn start(&mut self, note: u8, velocity: f32, _sample_rate: f32) {
+        // Whether this voice is already sounding decides how the handover is
+        // made. It is read before `note` is overwritten.
+        let taking_over = self.note.is_some();
         self.note = Some(note);
         self.velocity = velocity.clamp(0.0, 1.0);
         // Oscillator phases are deliberately not reset. Restarting every voice
         // from phase zero makes stacked notes sum coherently on their first
         // cycle, which reads as a click at the start of a chord.
-        self.filter.reset();
+        if !taking_over {
+            // A voice that has been idle still holds whatever its filter was
+            // left ringing with, frozen since the note ended - `render`
+            // returns early once `note` is None, so nothing decays it. A new
+            // note starts from a defined state rather than from a residue of
+            // whichever note happened to use this slot last.
+            self.filter.reset();
+        } else {
+            // Taking a voice over from a note that is still sounding is a
+            // different matter, and resetting here was the bug: the filter's
+            // integrators carry the signal, so zeroing them dropped the
+            // output to nothing in a single sample. Measured on the stolen
+            // voice at a 300 Hz cutoff, the step was ten times the waveform's
+            // own slope - an abrupt cut, which is exactly what a click is.
+            //
+            // Keeping the state hands the voice over instead. The filter's
+            // stored energy decays with its own time constant while the new
+            // note's oscillator establishes itself, so what is heard is the
+            // oldest note changing pitch rather than being cut off. The
+            // envelope already behaves the same way: `gate_off` and
+            // `gate_on` both continue from the current level rather than
+            // jumping.
+        }
         self.env.gate_on();
     }
 
@@ -202,8 +227,9 @@ impl VoicePool {
             return None;
         }
 
-        // Steal the oldest. It is released rather than cut, so the theft fades
-        // instead of clicking.
+        // Steal the oldest. The voice is handed over rather than cut: it
+        // keeps its filter state and its envelope level, so the note it was
+        // playing changes pitch instead of stopping dead (see `Voice::start`).
         let victim = self
             .voices
             .iter_mut()
@@ -712,6 +738,111 @@ mod tests {
             "after 15 ms the scale was {settled:.4}, still {:.1} % short of \
              its target {target:.4} - a glide that slow pumps on fast playing",
             remaining * 100.0
+        );
+    }
+    /// What the voice's filter has stored, observed through the filter's own
+    /// behaviour: feeding it silence returns its natural response, which is
+    /// zero exactly when its integrators are.
+    ///
+    /// This probe advances the filter by one sample, so it is only ever used
+    /// at the end of what a test is asserting about.
+    fn filter_residue(v: &mut Voice, cutoff: f32, q: f32) -> f32 {
+        v.filter.lowpass(0.0, cutoff, q, SR).abs()
+    }
+
+    /// Params with the filter somewhere dark, where the theft was worst.
+    fn dark_params(cutoff: f32, q: f32) -> ParamValues {
+        let reg = crate::params::registry::ParamRegistry::new();
+        let mut pv = params();
+        pv.0[p::FILTER_CUTOFF.0 as usize] = reg.normalize(p::FILTER_CUTOFF, cutoff);
+        pv.0[p::FILTER_RESONANCE.0 as usize] = reg.normalize(p::FILTER_RESONANCE, q);
+        pv
+    }
+
+    #[test]
+    fn stealing_a_voice_hands_it_over_instead_of_cutting_it() {
+        // Sixteen notes held and a seventeenth played is ordinary: thirteen
+        // keys plus release tails gets there inside half a second. The theft
+        // used to reset the stolen voice's filter, and since the filter's
+        // integrators carry the signal, the output dropped to nothing in a
+        // single sample.
+        //
+        // Measured on the stolen voice itself, with no other voices to hide
+        // behind, as a multiple of the waveform's own sample-to-sample
+        // movement - the same yardstick the polyphony-scale glide uses:
+        //
+        //   cutoff 2 kHz            2.74x before   0.06x after
+        //   cutoff 300 Hz          10.22x before   0.92x after
+        //   cutoff 400 Hz, Q 18     6.99x before   0.75x after
+        //   cutoff 12 kHz           0.45x before   0.01x after
+        for (cutoff, q) in [(2_000.0f32, 1.0f32), (300.0, 1.0), (400.0, 18.0)] {
+            let pv = dark_params(cutoff, q);
+            let mut v = Voice::default();
+            v.start(48, 1.0, SR);
+            let mut buf = vec![0.0f32; 512];
+            for _ in 0..40 {
+                buf.fill(0.0);
+                v.render(&mut buf, &pv, SR);
+            }
+            let last = *buf.last().unwrap();
+            let own_slope = buf
+                .windows(2)
+                .fold(0.0f32, |a, w| a.max((w[1] - w[0]).abs()));
+            assert!(own_slope > 0.0, "the voice was silent, nothing to steal");
+
+            v.start(80, 1.0, SR);
+            buf.fill(0.0);
+            v.render(&mut buf, &pv, SR);
+            let step = (buf[0] - last).abs();
+            assert!(
+                step <= own_slope,
+                "at cutoff {cutoff} Hz / Q {q} the theft moved the signal \
+                 {step:.5} in one sample, more than the {own_slope:.5} the \
+                 waveform moves on its own - that is a cut, not a handover"
+            );
+
+            // And the mechanism, so a future change cannot pass the
+            // measurement above by accident: the voice kept its filter.
+            assert!(
+                filter_residue(&mut v, cutoff, q) > 1e-6,
+                "the stolen voice's filter was emptied"
+            );
+        }
+    }
+
+    #[test]
+    fn a_voice_reused_after_going_idle_starts_from_a_clean_filter() {
+        // The other half of the same decision. A voice that has gone idle is
+        // not sounding, so there is nothing to hand over - and its filter has
+        // been frozen since the note ended, because `render` returns early
+        // once `note` is None and nothing decays it. A new note must not
+        // begin inside the residue of whichever note used this slot last.
+        let (cutoff, q) = (400.0f32, 18.0f32);
+        let pv = dark_params(cutoff, q);
+        let mut v = Voice::default();
+        v.start(48, 1.0, SR);
+        let mut buf = vec![0.0f32; 512];
+        for _ in 0..40 {
+            buf.fill(0.0);
+            v.render(&mut buf, &pv, SR);
+        }
+        v.release();
+        for _ in 0..600 {
+            buf.fill(0.0);
+            v.render(&mut buf, &pv, SR);
+        }
+        assert!(v.is_idle(), "the voice never freed itself");
+        assert!(
+            filter_residue(&mut v, cutoff, q) > 1e-6,
+            "the filter emptied itself on the way to idle, so this test \
+             cannot tell whether starting a note clears it"
+        );
+
+        v.start(48, 1.0, SR);
+        assert_eq!(
+            filter_residue(&mut v, cutoff, q),
+            0.0,
+            "a reused voice began inside the previous note's filter"
         );
     }
 }

@@ -361,8 +361,12 @@ rule and a smoke test, not a habit.
 
 ## 6. Synth voice
 
-Sixteen voices in a fixed pool, no allocation, last-note-priority stealing with
-a fast release on the stolen voice (an abrupt cut clicks).
+Sixteen voices in a fixed pool, no allocation, last-note-priority stealing: the
+newest note always sounds, and the voice it takes is the oldest. The theft is a
+*handover*, not a cut — the stolen voice keeps its filter state and its envelope
+level, so the note it was playing changes pitch rather than stopping dead.
+Zeroing that state instead drops the voice's output to silence in a single
+sample, which is what an abrupt cut is and what it sounds like.
 
 Per voice: two oscillators with detune, a TPT state-variable filter (stable at
 high resonance, unlike a naive digital ladder), ADSR, velocity.
