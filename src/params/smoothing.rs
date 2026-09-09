@@ -1,5 +1,10 @@
-/// One-pole smoothing so that a jumping MIDI value or a yanked whammy bar does
-/// not produce zipper noise.
+/// One-pole smoothing for a value that would otherwise step between blocks - a
+/// jumping MIDI value, a yanked whammy bar, or a gain factor recomputed from
+/// the voice count.
+///
+/// Its user today is `audio::voice::VoicePool`, which glides the polyphony
+/// scale with it. The parameter path is not smoothed yet and ARCHITECTURE SS4
+/// says so; see M2 in the roadmap.
 #[derive(Clone, Copy, Debug)]
 pub struct Smoother {
     current: f32,

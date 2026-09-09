@@ -36,7 +36,14 @@ pub struct ProcessCtx<'a> {
     pub sample_rate: f32,
     pub inputs: [Option<&'a [f32]>; MAX_INPUTS],
     pub outputs: [Option<&'a mut [f32]>; MAX_OUTPUTS],
-    /// Resolved, normalised 0..1, indexed by the module spec's `params` order.
+    /// Every resolved parameter, normalised 0..1, indexed by `ParamId` - the
+    /// whole array, not the subset this module's spec lists.
+    ///
+    /// A module reads the ids it cares about by name
+    /// (`ctx.params.get(FILTER_CUTOFF.0 as usize)`), which is what makes a
+    /// spec's `params` list metadata for the interface rather than an index
+    /// space: adding a parameter to one module's spec cannot shift another
+    /// module's readings.
     pub params: &'a [f32],
 }
 
@@ -49,10 +56,6 @@ impl<'a> ProcessCtx<'a> {
 
     pub fn output(&mut self, index: usize) -> Option<&mut [f32]> {
         self.outputs.get_mut(index)?.as_deref_mut()
-    }
-
-    pub fn param(&self, index: usize) -> f32 {
-        self.params.get(index).copied().unwrap_or(0.0)
     }
 }
 

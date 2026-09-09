@@ -246,6 +246,15 @@ effective(param) = clamp( base(param) + Σ modulation(param), range )
   it is a row.
 * Values feeding DSP are **smoothed** (one-pole, ~5 ms) so a jumping MIDI CC or a
   yanked whammy does not produce zipper noise.
+  **Not yet true of the parameter path.** `ModMatrix::recompute` hands the summed
+  value straight to the DSP once a block, so a large jump steps rather than
+  glides. The one-pole itself is built and in service — `params::smoothing::
+  Smoother` glides the voice pool's polyphony scale — but covering every
+  parameter means the DSP reading a per-sample value instead of a per-block
+  scalar, which changes `ProcessCtx::params` and every module that reads it.
+  Nothing in M1a can jump a parameter: no interface exposes a macro and there is
+  no MIDI. It arrives in **M2**, where a CC and the mapping UI first make it
+  reachable.
 
 ### Macros (§11)
 

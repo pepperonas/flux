@@ -16,15 +16,15 @@ use crate::params::registry::{ParamRegistry, REVERB_MIX, REVERB_SIZE};
 /// least 3 (e.g. `gcd(1557, 1422) = 9`, since `1557 = 3²·173` and
 /// `1422 = 2·3²·79`; a previous version of this comment claimed
 /// coprimality and was simply wrong - one `gcd()` call disproves it).
-/// Freeverb's actual defence against audible ringing is proportional
-/// spacing across enough differently-sized combs, arrived at empirically
-/// over decades of use by that design - not number-theoretic
-/// independence between the lengths. Nothing in this codebase has
-/// independently verified this instance to be free of pitched resonance
-/// (no frequency-domain measurement has been run against it here); the
-/// test suite exercises numerical stability - `feedback < 1.0` keeps the
-/// output finite and bounded - which is a different property from the
-/// absence of audible coloration.
+/// Why the design nonetheless does not ring audibly is not something
+/// this codebase can state: the previous version of this paragraph
+/// offered an explanation for it, which was no more sourced than the
+/// coprimality claim it replaced. Nothing here has verified this
+/// instance to be free of pitched resonance either - no frequency-domain
+/// measurement has been run against it. What the test suite does
+/// exercise is numerical stability, `feedback < 1.0` keeping the output
+/// finite and bounded, which is a different property from the absence of
+/// audible coloration.
 const COMB_LENS: [usize; 4] = [1_557, 1_617, 1_491, 1_422];
 const ALLPASS_LENS: [usize; 2] = [225, 556];
 

@@ -66,10 +66,16 @@ pads, screen and encoder positions are all output — so that decision is revers
 * Mapping UI: what is bound to what, change it, remove it
 * **Learn mode**: press Learn → move any control (key, CC, pad, later a fret) →
   FLUX names it → pick a target → save. One implementation covers every source,
-  because they all speak `ControlId`
+  because they all speak `ControlId`. This is the point at which a player can
+  first build a **chord bound to a note**, which `resolve` does not release
+  cleanly — see the limitation recorded in `input::mapping::resolve`
 * Full macro set: BRIGHT · DARK · WET · DRY · ENERGY · CHAOS · DENSITY · SPACE,
   unipolar or bipolar
 * Mappings, macro assignments and device profiles persist to disk
+* **Parameter smoothing wired into the DSP path** (ARCHITECTURE §4). The
+  one-pole exists and is used; what M1a does not have is a per-sample parameter
+  value for the DSP to read, and nothing before M2 can jump a parameter hard
+  enough to need one
 
 Built against the published protocol and accepted on the physical device, which
 is expected within days. Protocol details are in

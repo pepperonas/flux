@@ -164,6 +164,21 @@ pub fn resolve(
 ) -> Vec<Action> {
     // A chord takes precedence over the plain binding of the same control.
     // Without this, pressing a modified combination would fire both meanings.
+    //
+    // KNOWN LIMITATION, not reachable in M1a. A chord bound to `Binding::Note`
+    // leaks. The press comes through here and records the note it started in
+    // `held`; the release never does, because this branch only runs on a press
+    // and a release therefore falls through to the plain binding of the
+    // trigger control. The started note gets no note-off - a stuck note, in an
+    // instrument with no panic action - and its entry in `held.notes` is never
+    // reclaimed, so the map grows for as long as the session runs.
+    //
+    // Nothing builds such a mapping today: `default_mapping` has no chords at
+    // all, and `add_chord` has no caller outside tests. M2's learn mode lets a
+    // player make one, so it has to be settled before that ships. It is not a
+    // symmetrical fix: by the time the trigger is released the modifier may
+    // already have been let go, so the chord that fired can no longer be
+    // recognised from `held` and would have to be remembered from the press.
     if event.value.is_press() {
         for (chord, binding) in &mapping.chords {
             if chord.trigger == event.id && chord.held.iter().all(|id| held.contains(id)) {
