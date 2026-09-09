@@ -271,22 +271,40 @@ impl VoicePool {
         // That factor changes whenever the voice count does, and applying the
         // new one to a whole block is a step: with one note sustaining, adding
         // a second multiplied the buffer by 1/sqrt(2) between the last sample
-        // of one block and the first of the next. Measured at a 512-frame
-        // block, that moved the signal 0.164 in one sample where the waveform
-        // itself was moving 0.014 - twelve times its own slope, which is a
-        // click, not a duck. Playing a chord one finger at a time is the first
-        // thing anyone does with a synth, so the factor is glided to its new
-        // value one sample at a time instead.
+        // of one block and the first of the next. Measured, the arriving voice
+        // moved the signal by 29.29 % of it in that one sample - at every
+        // block size, and before its own envelope had produced anything at
+        // all. That is a click, not a duck. Playing a chord one finger at a
+        // time is the first thing anyone does with a synth, so the factor is
+        // glided to its new value one sample at a time instead; the same
+        // measurement after the glide reads 0.12 %.
+        //
+        // An earlier version of this comment called that step "twelve times
+        // the waveform's own slope". It is not. The denominator used there was
+        // the largest movement in the sixteen samples after the boundary,
+        // while this file's tests measure slope across the whole block; on
+        // that yardstick the step is 1.04x the waveform's own movement -
+        // still a real discontinuity, but not the order of magnitude claimed.
+        // The 29.29 % above needs no yardstick: it is exactly 1 - 1/sqrt(2),
+        // and unlike a slope ratio it does not depend on where in the
+        // waveform's cycle the block boundary happens to fall.
         //
         // The cost, measured: if the voice count jumps a long way inside a
         // single block, the scale is briefly too high for the number of
-        // voices now sounding. Fifteen notes landing on one already held
-        // peaks at 1.91 against the 1.10 the same chord struck from silence
-        // gives - a 15 ms overshoot into the master clipper. It is bounded
-        // (the clipper is the bound), it is a gesture no pair of hands can
-        // make on a thirteen-key layout, and the alternative is a click every
-        // time a note is added. Adding one note to one held note - the case
-        // this exists for - overshoots by nothing worth measuring.
+        // voices now sounding. Fifteen notes landing on one already held peaks
+        // at 1.39 to 2.13 across twenty-four readings - four block sizes by
+        // six positions in the held note's envelope - against 1.0989 for the
+        // same chord struck from silence. So a 1.3x to 1.9x overshoot into the
+        // master clipper, lasting the 15 ms the glide needs to settle. The
+        // span is the honest figure rather than any single pair out of it,
+        // because which reading you get depends on where in the envelope the
+        // chord lands; an earlier version of this comment quoted one near the
+        // top of the span as though it were the number.
+        //
+        // It is bounded - the clipper is the bound - it is a gesture no pair
+        // of hands can make on a thirteen-key layout, and the alternative is a
+        // click every time a note is added. Adding one note to one held note,
+        // the case this exists for, overshoots by nothing worth measuring.
         let active = self.active_count();
         let target = 1.0 / (active.max(1) as f32).sqrt();
 

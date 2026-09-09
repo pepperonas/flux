@@ -454,6 +454,16 @@ mod tests {
         // through the graph, but the specs in `graph::patch` describe it - as
         // the comment on the fixed patch says they do - so this pins that
         // claim as well.
+        //
+        // The guard is weaker than the rule it enforces, and knowing where it
+        // stops matters more than the reassurance it gives: it checks that a
+        // running module *declares* the parameter in its spec, not that
+        // anything reads it to any audible end. Verified rather than supposed -
+        // restoring the CHAOS -> LFO_AMOUNT route *and* adding an Lfo to the
+        // patch whose control output nothing consumes leaves this test green,
+        // while the macro still moves nothing anybody can hear. Closing that
+        // needs the graph to know which outputs actually reach the terminal
+        // node, which is M4's business, not a stronger assertion here.
         use crate::graph::patch::{spec_for, ModuleKind};
         use std::collections::HashSet;
 

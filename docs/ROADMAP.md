@@ -76,6 +76,12 @@ pads, screen and encoder positions are all output — so that decision is revers
   one-pole exists and is used; what M1a does not have is a per-sample parameter
   value for the DSP to read, and nothing before M2 can jump a parameter hard
   enough to need one
+* **Voice stealing at unequal velocity** (ARCHITECTURE §6). The handover carries
+  the stolen voice's filter and its envelope but not the gain they feed, so a
+  theft between two notes struck at different strengths still steps — and in the
+  quiet-stolen-by-loud direction it steps ten times harder than the cut the
+  handover replaced. Latent on the computer keyboard, ordinary the moment every
+  note carries its own velocity. Ships with a stealing test at unequal velocity
 
 Built against the published protocol and accepted on the physical device, which
 is expected within days. Protocol details are in

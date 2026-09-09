@@ -385,6 +385,29 @@ level, so the note it was playing changes pitch rather than stopping dead.
 Zeroing that state instead drops the voice's output to silence in a single
 sample, which is what an abrupt cut is and what it sounds like.
 
+**The handover carries the filter and the envelope, but not the gain they feed.**
+`amp = level × velocity`, and a theft overwrites the voice's velocity, so the
+handover is continuous only when the two notes were struck at the same strength.
+Measured as a multiple of the waveform's own sample-to-sample movement, and in
+absolute terms against the cut this replaced:
+
+| stolen → stealing | before | after |
+|---|---|---|
+| velocity 1.0 → 1.0 | 0.2246 (2.74×) | **0.0048 (0.06×)** |
+| velocity 1.0 → 0.9 | 0.2250 (2.74×) | 0.0271 (0.33×) |
+| velocity 1.0 → 0.1 | 0.2277 (2.77×) | 0.2057 (2.51×) |
+| velocity 0.1 → 1.0 | 0.0194 (2.36×) | 0.2005 (**24.4×**) |
+
+The last row is a regression: a quiet voice's retained filter output is suddenly
+multiplied by a loud voice's gain, which is ten times the step the cut produced.
+On the computer keyboard it is latent — velocity moves in 0.1 steps and a single
+step measures 0.33×, so reaching either extreme needs nine keystrokes between two
+notes while sixteen voices are held. It becomes ordinary in **M2**, where every
+MIDI note carries its own velocity. The fix is to glide the gain across the
+handover rather than to substitute it, and it belongs there, together with a
+stealing test at unequal velocity: the current one only ever steals 1.0 → 1.0 and
+cannot see this.
+
 Per voice: two oscillators with detune, a TPT state-variable filter (stable at
 high resonance, unlike a naive digital ladder), ADSR, velocity.
 

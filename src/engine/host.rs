@@ -65,11 +65,31 @@ impl ObservedBufferSize {
 /// A callback that takes longer than the block it was asked to fill is an
 /// underrun. The device has a fixed amount of audio left when it calls us and
 /// a fixed amount of time before it needs more; overrunning that is precisely
-/// the moment it runs dry. This is measured here rather than asked of the
-/// backend because CPAL's error callback does not report underruns on this
-/// platform - `error_callback` is invoked nowhere in cpal 0.15's desktop
-/// CoreAudio backend at all - so a counter wired to it would be exactly as
-/// permanently zero as the unwired one it replaced.
+/// the moment it runs dry.
+///
+/// It is measured here rather than asked of the backend because the backend
+/// does not have the answer: `cpal::StreamError` has exactly two variants,
+/// `DeviceNotAvailable` and `BackendSpecific`, and neither of them is an xrun.
+/// A counter wired to the error callback would have been counting device
+/// errors under the name "underruns".
+///
+/// That is a statement about what the callback reports, not about whether it
+/// fires. It does fire: cpal 0.15.3 invokes it at three sites in
+/// `host/coreaudio/macos/mod.rs` - the device-disconnect listener (467), and a
+/// host-time conversion failure inside each of the input (590) and output
+/// (694) render callbacks. An earlier version of this comment claimed the
+/// backend never called it at all. That was wrong, and wrong in an instructive
+/// way: the grep it cited as its evidence searched for `error_callback(`,
+/// while every macOS site reads `(error_callback.lock().unwrap())(...)`. A
+/// search that finds nothing is worth nothing until it has been shown finding
+/// something.
+///
+/// One consequence, pre-existing and on the error path only, but easier to
+/// find written down than rediscovered: site 694 is inside
+/// `set_render_callback`, so the closure this crate hands cpal as its error
+/// handler - a `log::error!` - runs on the CoreAudio render thread, and cpal
+/// takes a mutex around it. Logging and locking on the audio thread are both
+/// things this codebase otherwise refuses to do.
 ///
 /// It measures our own overruns and only those. The operating system can also
 /// drop a buffer for reasons we never see, and those are not counted; the
@@ -332,8 +352,8 @@ mod tests {
     #[test]
     fn a_callback_that_overran_its_block_is_an_underrun() {
         // Taking longer to fill a block than the block lasts is exactly the
-        // moment the device runs dry. This is measured here because cpal's
-        // error callback reports nothing at all on this platform.
+        // moment the device runs dry. It is measured here because a
+        // `StreamError` is a device error, not an xrun - see `callback_cost`.
         let (permille, missed) = callback_cost(256, 48_000.0, Duration::from_micros(10_666));
         assert!(missed);
         assert!(

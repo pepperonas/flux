@@ -78,14 +78,20 @@ mod tests {
     #[test]
     fn the_clip_warning_can_actually_fire() {
         // It could not before. The meter read the block leaving the graph,
-        // which the master stage has already squashed through `tanh` - so the
-        // published peak could never exceed tanh(1.5) = 0.905, and a warning
-        // at 0.95 was unreachable by construction. Driven as hard as the
-        // instrument goes it measured 0.720; the ceiling was 0.905.
+        // which the master stage has already squashed through `tanh`, so the
+        // published peak could never exceed tanh(1.5) = 0.905 whatever was
+        // played, and a warning at 0.95 was unreachable by construction.
         //
-        // The peak published now is the master stage's own, taken before the
-        // clipper. Sixteen voices at full level with WET and CHAOS wide open -
-        // ordinary macro positions, not a contrived state - reaches 1.398.
+        // Both figures are from the scenario this test performs - sixteen
+        // voices at full level with WET and CHAOS wide open, which are
+        // ordinary macro positions rather than a contrived state:
+        //
+        //   metering the block that leaves the graph:   0.885   (ceiling 0.905)
+        //   metering the master stage before its clip:  1.398
+        //
+        // An earlier version of this comment paired that 1.398 with 0.720.
+        // 0.720 is the same measurement taken with the macros left at their
+        // defaults - a different scenario, and so not a comparison.
         let telemetry = Telemetry::new(64);
         let mut engine = AudioEngine::new(48_000.0, 512, Arc::clone(&telemetry));
         engine.params.set_base(MASTER_GAIN, 1.0);
