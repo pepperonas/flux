@@ -7,6 +7,7 @@
 mod app;
 mod audio;
 mod core;
+mod engine;
 mod graph;
 mod input;
 mod params;
@@ -26,7 +27,7 @@ fn main() -> eframe::Result<()> {
         options,
         Box::new(|cc| {
             ui::theme::apply(&cc.egui_ctx);
-            Ok(Box::new(app::FluxApp::default()))
+            Ok(Box::new(app::FluxApp::new()))
         }),
     )
 }

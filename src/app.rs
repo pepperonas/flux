@@ -1,8 +1,37 @@
+use crate::engine::host::AudioHost;
 use crate::ui::{self, View};
 
-#[derive(Default)]
 pub struct FluxApp {
     view: View,
+    audio: Option<AudioHost>,
+    audio_error: Option<String>,
+    test_tone: bool,
+}
+
+impl FluxApp {
+    pub fn new() -> FluxApp {
+        // A device error must not take the process down: it is shown in the
+        // diagnostics view, and the rest of the interface keeps working.
+        let (audio, audio_error) = match AudioHost::start(None) {
+            Ok(host) => (Some(host), None),
+            Err(err) => {
+                log::error!("audio host failed to start: {err}");
+                (None, Some(err.to_string()))
+            }
+        };
+        FluxApp {
+            view: View::default(),
+            audio,
+            audio_error,
+            test_tone: false,
+        }
+    }
+}
+
+impl Default for FluxApp {
+    fn default() -> FluxApp {
+        FluxApp::new()
+    }
 }
 
 impl eframe::App for FluxApp {
@@ -25,7 +54,12 @@ impl eframe::App for FluxApp {
 
         egui::CentralPanel::default().show(ctx, |ui| match self.view {
             View::Performance => ui::performance::show(ui),
-            View::Debug => ui::debug::show(ui),
+            View::Debug => ui::debug::show(
+                ui,
+                self.audio.as_ref(),
+                self.audio_error.as_deref(),
+                &mut self.test_tone,
+            ),
         });
     }
 }
