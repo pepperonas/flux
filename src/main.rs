@@ -5,6 +5,7 @@
 #![allow(dead_code)]
 
 mod app;
+mod core;
 mod ui;
 
 fn main() -> eframe::Result<()> {
