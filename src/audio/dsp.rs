@@ -449,4 +449,42 @@ mod tests {
         assert!(env.is_idle());
         assert_eq!(env.tick(&p, SR), 0.0);
     }
+    #[test]
+    fn an_oscillator_asked_for_an_impossible_frequency_stays_in_range() {
+        // `every_waveform_stays_in_range_across_the_spectrum` only asks for
+        // frequencies a keyboard can produce at 48 kHz, so the clamp on `dt`
+        // never does anything there: removing `.clamp(0.0, 0.49)` leaves every
+        // test in this crate green.
+        //
+        // It is not decoration. The phase wrap subtracts 1.0 exactly once per
+        // sample, so a `dt` outside [0, 1) walks the phase away without bound
+        // and the waveform goes with it - measured with the clamp removed, a
+        // saw at -440 Hz reaches 995 994 and one at five times the sample rate
+        // reaches 632 009. With it, nothing exceeds 1.0.
+        //
+        // Reachable, not hypothetical: `Action::NoteOn` carries a `u8`, so a
+        // source that is not the computer keyboard can ask for note 200, and
+        // at any sample rate below about 25 kHz even the top of the ordinary
+        // MIDI range is already past Nyquist. A DSP primitive must not depend
+        // on its caller having checked.
+        for wave in [
+            Waveform::Sine,
+            Waveform::Triangle,
+            Waveform::Saw,
+            Waveform::Square,
+        ] {
+            for freq in [-44_100.0, -440.0, 0.0, SR, 5.0 * SR, 1e9] {
+                let mut osc = Osc::default();
+                for _ in 0..1_000 {
+                    let v = osc.tick(freq, SR, wave);
+                    assert!(v.is_finite(), "{wave:?} at {freq} Hz produced {v}");
+                    assert!(
+                        v.abs() <= 1.5,
+                        "{wave:?} at {freq} Hz produced {v}, outside the \
+                         waveform's range"
+                    );
+                }
+            }
+        }
+    }
 }
