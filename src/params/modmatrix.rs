@@ -64,6 +64,12 @@ impl ModMatrix {
         }
     }
 
+    /// Every route currently in the matrix, so a caller can check what a
+    /// source actually reaches.
+    pub fn routes(&self) -> &[ModRoute] {
+        &self.routes
+    }
+
     pub fn value(&self, p: ParamId) -> f32 {
         self.out[p.0 as usize]
     }

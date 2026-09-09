@@ -42,7 +42,10 @@ pub const MACROS: [MacroDef; MACRO_COUNT] = [
         help: "How wide and distant everything sits." },
     MacroDef { id: MacroId(6), name: "TIGHT", name_neg: Some("LOOSE"), bipolar: true,
         help: "How strictly things sit on the beat. Right is locked, left breathes." },
-    MacroDef { id: MacroId(7), name: "SIMPLE", name_neg: Some("COMPLEX"), bipolar: true,
+    // COMPLEX is the positive name because the help says right is elaborate,
+    // and `label` shows `name` for a positive value. The other three bipolar
+    // pairs already read that way round.
+    MacroDef { id: MacroId(7), name: "COMPLEX", name_neg: Some("SIMPLE"), bipolar: true,
         help: "How intricate the material is. Right is elaborate, left is stripped back." },
 ];
 
@@ -112,5 +115,32 @@ mod tests {
         use std::collections::HashSet;
         let ids: HashSet<_> = MACROS.iter().map(|m| macro_source(m.id)).collect();
         assert_eq!(ids.len(), MACROS.len());
+    }
+
+    #[test]
+    fn every_bipolar_macro_shows_its_right_hand_name_at_positive_values() {
+        // An encoder has no end stop, so a bipolar macro is an axis and the
+        // help text describes what its *right* does. `label` shows `name` for
+        // a positive value, so `name` must be the right-hand word - otherwise
+        // the display reads one thing while the knob does the other.
+        //
+        // SIMPLE/COMPLEX was the one that did not: it showed "SIMPLE" at
+        // positive values while its own help says "Right is elaborate". The
+        // whole table is pinned rather than that one entry, so the next pair
+        // added has to answer the same question.
+        let axes: Vec<(&str, &str)> = MACROS
+            .iter()
+            .filter(|m| m.bipolar)
+            .map(|m| (m.label(0.6), m.label(-0.6)))
+            .collect();
+        assert_eq!(
+            axes,
+            vec![
+                ("BRIGHT", "DARK"),
+                ("WET", "DRY"),
+                ("TIGHT", "LOOSE"),
+                ("COMPLEX", "SIMPLE"),
+            ]
+        );
     }
 }

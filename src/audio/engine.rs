@@ -53,6 +53,15 @@ impl AudioEngine {
         // The M1a macro routes. The remaining macros are defined but unrouted
         // until patterns exist in M5 - a knob that moves nothing is honest here,
         // and the interface marks them as inactive rather than pretending.
+        //
+        // CHAOS used to be routed to LFO_AMOUNT at depth 0.7 as well. It is
+        // not any more: the fixed patch contains no Lfo, so seven tenths of
+        // that macro's authority reached no running module. Instantiating one
+        // would not have fixed it either - the Lfo's only output is a control
+        // signal, and nothing consumes control signals yet, so it would burn a
+        // buffer per block and still move nothing. The route comes back when
+        // the LFO is in the patch *and* has somewhere to modulate, which the
+        // roadmap puts in the rest of M1.
         let bright = macro_source(MACROS[0].id);
         let wet = macro_source(MACROS[1].id);
         let chaos = macro_source(MACROS[3].id);
@@ -75,11 +84,6 @@ impl AudioEngine {
             source: wet,
             target: p::DELAY_MIX,
             depth: 0.35,
-        });
-        params.add_route(ModRoute {
-            source: chaos,
-            target: p::LFO_AMOUNT,
-            depth: 0.7,
         });
         params.add_route(ModRoute {
             source: chaos,
@@ -430,6 +434,46 @@ mod tests {
         for _ in 0..500 {
             e.render(256);
             assert!(e.output()[..256].iter().all(|v| v.is_finite()));
+        }
+    }
+    #[test]
+    fn every_modulation_route_lands_on_a_parameter_something_runs() {
+        // A macro that moves nothing is a lie told with a knob. CHAOS used to
+        // spend seven tenths of its depth on LFO_AMOUNT while the fixed patch
+        // contained no Lfo at all, so this checks the property rather than
+        // that one route: every route's target must be read either by the
+        // voice chain or by a global module that is actually instantiated.
+        //
+        // The voice chain is executed directly in `audio::voice` rather than
+        // through the graph, but the specs in `graph::patch` describe it - as
+        // the comment on the fixed patch says they do - so this pins that
+        // claim as well.
+        use crate::graph::patch::{spec_for, ModuleKind};
+        use std::collections::HashSet;
+
+        let e = engine();
+        let mut readable: HashSet<u16> = HashSet::new();
+        for kind in [
+            ModuleKind::Oscillator,
+            ModuleKind::Filter,
+            ModuleKind::Envelope,
+            ModuleKind::Vca,
+        ] {
+            readable.extend(spec_for(kind).params.iter().map(|p| p.0));
+        }
+        for module in &e.modules {
+            readable.extend(module.spec().params.iter().map(|p| p.0));
+        }
+
+        for route in e.params.routes() {
+            let name = e.registry.desc(route.target).name;
+            assert!(
+                readable.contains(&route.target.0),
+                "a modulation route drives {name} ({:?}) at depth {}, and \
+                 nothing running reads it - the macro moves nothing",
+                route.target,
+                route.depth
+            );
         }
     }
 }
