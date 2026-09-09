@@ -5,6 +5,7 @@
 #![allow(dead_code)]
 
 mod app;
+mod audio;
 mod core;
 mod input;
 mod params;
