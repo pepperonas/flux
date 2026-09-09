@@ -1,6 +1,5 @@
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
-use std::time::Duration;
 
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 
@@ -17,19 +16,47 @@ pub enum HostError {
     Stream(String),
 }
 
-/// The buffer size we ask the device for. An instrument that answers late is
-/// not an instrument, so we request something small; if the device refuses,
-/// `start` retries with whatever it prefers instead of refusing to make sound.
+/// The buffer size actually requested from the device. An instrument that
+/// answers late is not an instrument, so we ask for something small; if the
+/// device refuses, `start` retries with whatever it prefers instead of
+/// refusing to make sound. This is a request only - see `ObservedBufferSize`
+/// for what the device is actually delivering.
 const REQUESTED_BUFFER_FRAMES: u32 = 256;
 
-/// How long `start` waits, once the stream is playing, for the device to
-/// actually call back before falling back to `REQUESTED_BUFFER_FRAMES` as a
-/// last-resort estimate. This only matters on the fallback path, where the
-/// stream is built with `BufferSize::Default` and CPAL does not expose what
-/// the host picked ahead of time - the true number of frames per callback is
-/// only knowable by watching a real callback arrive.
-const FIRST_CALLBACK_TIMEOUT: Duration = Duration::from_millis(500);
-const FIRST_CALLBACK_POLL: Duration = Duration::from_millis(1);
+/// The number of frames a callback actually delivers, filled in by the first
+/// callback that happens. Neither `BufferSize::Fixed` (a request the device
+/// can round) nor `BufferSize::Default` (used on the fallback path, and
+/// completely opaque to CPAL's caller ahead of time) tells you the real
+/// number before a callback has actually carried one, so this starts unknown
+/// rather than guessing.
+///
+/// Zero is the "not yet observed" sentinel. This does not collide with a
+/// real observation in practice - no CPAL backend hands a callback a
+/// zero-length buffer - so it is left as a plain `AtomicU32` rather than
+/// something heavier; see `get`.
+struct ObservedBufferSize(AtomicU32);
+
+impl ObservedBufferSize {
+    fn new() -> ObservedBufferSize {
+        ObservedBufferSize(AtomicU32::new(0))
+    }
+
+    /// Called from the audio callback. Never blocks, never allocates.
+    fn record(&self, frames: u32) {
+        self.0.store(frames, Ordering::Relaxed);
+    }
+
+    /// `None` until a callback has actually happened. The point of this
+    /// being `Option` rather than a `u32` with an implied "0 means unknown"
+    /// convention is that a caller cannot accidentally format the unknown
+    /// state as though it were a measurement.
+    fn get(&self) -> Option<u32> {
+        match self.0.load(Ordering::Relaxed) {
+            0 => None,
+            n => Some(n),
+        }
+    }
+}
 
 /// Owns the CPAL stream. The stream must not outlive this value and, on some
 /// platforms, must stay on the thread that built it - so `AudioHost` is held by
@@ -38,7 +65,7 @@ pub struct AudioHost {
     _stream: cpal::Stream,
     pub device_name: String,
     pub sample_rate: f32,
-    pub buffer_frames: u32,
+    buffer_frames: Arc<ObservedBufferSize>,
     pub telemetry: Arc<Telemetry>,
 }
 
@@ -50,8 +77,20 @@ impl AudioHost {
             .unwrap_or_default()
     }
 
-    pub fn latency_ms(&self) -> f32 {
-        self.buffer_frames as f32 / self.sample_rate * 1000.0
+    /// The number of frames the device is actually delivering per callback.
+    /// `None` until the first callback has happened - a silent device or one
+    /// that vanished between `build_output_stream` and `play` never reports
+    /// anything else, which is the point: the diagnostics view can show that
+    /// honestly instead of a plausible-looking guess.
+    pub fn buffer_frames(&self) -> Option<u32> {
+        self.buffer_frames.get()
+    }
+
+    /// Milliseconds of output latency implied by the last-observed buffer
+    /// size. `None` under exactly the same condition as `buffer_frames`.
+    pub fn latency_ms(&self) -> Option<f32> {
+        self.buffer_frames()
+            .map(|frames| frames as f32 / self.sample_rate * 1000.0)
     }
 
     pub fn start(preferred: Option<&str>) -> Result<AudioHost, HostError> {
@@ -82,13 +121,11 @@ impl AudioHost {
         let telemetry = Telemetry::new(1024);
         let mut engine = AudioEngine::new(sample_rate, 2048, Arc::clone(&telemetry));
 
-        // `BufferSize::Fixed` is a request the device can round or ignore, and
-        // the fallback path below asks for `BufferSize::Default`, whose actual
-        // frame count CPAL does not expose ahead of time. Either way the only
-        // ground truth for "how many frames does a callback actually carry" is
-        // a callback that has actually happened, so the first one records it
-        // here instead of us assuming a number.
-        let observed_frames = Arc::new(AtomicU32::new(0));
+        // Published asynchronously by whichever callback actually runs, and
+        // read on demand by `buffer_frames`/`latency_ms`. `start` does not
+        // wait for it: a stream that never calls back should be visible as
+        // "still measuring", not turn into a blocked application start-up.
+        let observed_frames = Arc::new(ObservedBufferSize::new());
 
         let cb_telemetry = Arc::clone(&telemetry);
         let cb_observed = Arc::clone(&observed_frames);
@@ -97,7 +134,7 @@ impl AudioHost {
             move |data: &mut [f32], _: &cpal::OutputCallbackInfo| {
                 let started = std::time::Instant::now();
                 let frames = data.len() / channels;
-                cb_observed.store(frames as u32, Ordering::Relaxed);
+                cb_observed.record(frames as u32);
                 engine.render(frames);
                 let out = engine.output();
                 for (i, frame) in data.chunks_mut(channels).enumerate() {
@@ -138,7 +175,7 @@ impl AudioHost {
                             // a fallback path that quietly reports nothing.
                             let started = std::time::Instant::now();
                             let frames = data.len() / channels;
-                            observed2.store(frames as u32, Ordering::Relaxed);
+                            observed2.record(frames as u32);
                             engine2.render(frames);
                             let out = engine2.output();
                             for (i, frame) in data.chunks_mut(channels).enumerate() {
@@ -162,36 +199,81 @@ impl AudioHost {
             .play()
             .map_err(|e| HostError::Stream(e.to_string()))?;
 
-        // Wait for the device to actually report a frame count rather than
-        // trusting the request: `Fixed` can be rounded by the device and
-        // `Default` (the fallback path) carries no size information at all
-        // until a callback happens.
-        let buffer_frames = wait_for_observed_frames(&observed_frames);
-
         Ok(AudioHost {
             _stream: stream,
             device_name,
             sample_rate,
-            buffer_frames,
+            buffer_frames: observed_frames,
             telemetry,
         })
     }
 }
 
-/// Polls `observed` until a real callback has recorded a frame count or the
-/// timeout elapses, in which case `REQUESTED_BUFFER_FRAMES` stands in as the
-/// best available estimate. This runs once, during application start-up, off
-/// the audio thread - never inside a callback.
-fn wait_for_observed_frames(observed: &AtomicU32) -> u32 {
-    let deadline = std::time::Instant::now() + FIRST_CALLBACK_TIMEOUT;
-    loop {
-        let frames = observed.load(Ordering::Relaxed);
-        if frames != 0 {
-            return frames;
-        }
-        if std::time::Instant::now() >= deadline {
-            return REQUESTED_BUFFER_FRAMES;
-        }
-        std::thread::sleep(FIRST_CALLBACK_POLL);
+/// Renders a buffer-size measurement for the diagnostics view, honest about
+/// not knowing it yet rather than showing a guess formatted like a fact.
+pub fn describe_buffer_frames(frames: Option<u32>) -> String {
+    match frames {
+        Some(n) => format!("{n} frames"),
+        None => "measuring…".to_string(),
+    }
+}
+
+/// Renders a latency measurement for the diagnostics view. See
+/// `describe_buffer_frames`.
+pub fn describe_latency_ms(latency_ms: Option<f32>) -> String {
+    match latency_ms {
+        Some(ms) => format!("{ms:.1} ms"),
+        None => "measuring…".to_string(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn buffer_size_is_unknown_until_the_first_callback() {
+        let observed = ObservedBufferSize::new();
+        assert_eq!(observed.get(), None);
+    }
+
+    #[test]
+    fn buffer_size_is_known_once_a_callback_has_recorded_one() {
+        let observed = ObservedBufferSize::new();
+        observed.record(512);
+        assert_eq!(observed.get(), Some(512));
+    }
+
+    #[test]
+    fn a_later_callback_updates_the_observed_size() {
+        // Not expected to change block-to-block in practice, but nothing here
+        // assumes it can't; recording just publishes the latest value.
+        let observed = ObservedBufferSize::new();
+        observed.record(256);
+        observed.record(512);
+        assert_eq!(observed.get(), Some(512));
+    }
+
+    #[test]
+    fn the_unknown_state_cannot_be_formatted_as_a_number() {
+        let frames_text = describe_buffer_frames(None);
+        assert!(
+            frames_text.chars().all(|c| !c.is_ascii_digit()),
+            "the 'unknown' buffer rendering contained a digit: {frames_text:?}"
+        );
+        assert!(frames_text.parse::<u32>().is_err());
+
+        let latency_text = describe_latency_ms(None);
+        assert!(
+            latency_text.chars().all(|c| !c.is_ascii_digit()),
+            "the 'unknown' latency rendering contained a digit: {latency_text:?}"
+        );
+        assert!(latency_text.parse::<f32>().is_err());
+    }
+
+    #[test]
+    fn the_known_state_formats_as_a_real_number() {
+        assert_eq!(describe_buffer_frames(Some(512)), "512 frames");
+        assert_eq!(describe_latency_ms(Some(11.6)), "11.6 ms");
     }
 }

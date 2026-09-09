@@ -1,3 +1,4 @@
+use crate::engine::host::{describe_buffer_frames, describe_latency_ms};
 use crate::engine::telemetry::{AudioCommand, Telemetry};
 
 pub fn show(
@@ -25,11 +26,14 @@ pub fn show(
             ui.label("Sample rate");
             ui.label(format!("{:.0} Hz", host.sample_rate));
             ui.end_row();
+            // "measuring…" until the device's first callback has actually
+            // happened - never a guessed number formatted as though it were
+            // one. See `engine::host::ObservedBufferSize`.
             ui.label("Buffer");
-            ui.label(format!("{} frames", host.buffer_frames));
+            ui.label(describe_buffer_frames(host.buffer_frames()));
             ui.end_row();
             ui.label("Latency");
-            ui.label(format!("{:.1} ms", host.latency_ms()));
+            ui.label(describe_latency_ms(host.latency_ms()));
             ui.end_row();
             ui.label("DSP load");
             ui.label(format!("{:.1} %", t.dsp_load_percent()));
