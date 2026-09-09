@@ -7,11 +7,8 @@ use crate::params::registry::{ParamRegistry, MASTER_GAIN};
 ///
 /// It carries an audio output port (see `spec_for`'s note on `ModuleKind::
 /// Output`), so the engine reads the finished block out of the pool like any
-/// other module's output. `buffer` is kept in addition to that: it is the
-/// module's own copy of the same samples, read by things outside the graph
-/// (such as a UI meter) that would otherwise need to reach into the pool.
+/// other module's output.
 pub struct Output {
-    pub buffer: Vec<f32>,
     /// Holds the block's dry input, for the same reason `Delay` and `Reverb`
     /// need one: `ctx.input` and `ctx.output` cannot be borrowed from `ctx`
     /// at once.
@@ -23,7 +20,6 @@ pub struct Output {
 impl Default for Output {
     fn default() -> Self {
         Output {
-            buffer: Vec::new(),
             scratch: Vec::new(),
             peak: 0.0,
             registry: ParamRegistry::new(),
@@ -48,13 +44,15 @@ impl Module for Output {
     }
 
     fn prepare(&mut self, _sample_rate: f32, max_block: usize) {
-        self.buffer = vec![0.0; max_block];
         self.scratch = vec![0.0; max_block];
     }
 
     fn reset(&mut self) {
-        self.buffer.fill(0.0);
         self.peak = 0.0;
+    }
+
+    fn peak(&self) -> Option<f32> {
+        Some(self.master_peak())
     }
 
     fn process(&mut self, ctx: &mut ProcessCtx) {
@@ -67,24 +65,28 @@ impl Module for Output {
         let gain = self.registry.denormalize(MASTER_GAIN, read(MASTER_GAIN));
 
         let mut peak = 0.0f32;
-        for (b, dry) in self.buffer[..frames]
-            .iter_mut()
-            .zip(&self.scratch[..frames])
-        {
-            let gained = (dry * gain).clamp(-1.5, 1.5);
-            peak = peak.max(gained.abs());
-            // A soft clip rather than a hard one: a runaway patch should
-            // sound wrong, not damage anything or produce a digital spike
-            // that lands like a click.
-            *b = gained.tanh();
+        match ctx.output(0) {
+            Some(out) => {
+                for (o, dry) in out.iter_mut().zip(&self.scratch[..frames]) {
+                    let gained = (dry * gain).clamp(-1.5, 1.5);
+                    peak = peak.max(gained.abs());
+                    // A soft clip rather than a hard one: a runaway patch
+                    // should sound wrong, not damage anything or produce a
+                    // digital spike that lands like a click. The clamp before
+                    // it bounds what the clipper is asked to do, so an
+                    // arbitrarily large input cannot arrive at `tanh` as an
+                    // infinity.
+                    *o = gained.tanh();
+                }
+            }
+            // Nobody is listening this block, but the meter must not freeze
+            // on a stale reading, so the block is still measured.
+            None => {
+                for dry in &self.scratch[..frames] {
+                    peak = peak.max((dry * gain).clamp(-1.5, 1.5).abs());
+                }
+            }
         }
         self.peak = peak;
-
-        // The pool buffer is the audio that actually reaches the device;
-        // `self.buffer` is filled first because it is the module's own
-        // record of the same samples, kept for callers outside the graph.
-        if let Some(out) = ctx.output(0) {
-            out[..frames].copy_from_slice(&self.buffer[..frames]);
-        }
     }
 }

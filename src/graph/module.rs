@@ -67,4 +67,18 @@ pub trait Module: Send {
     /// Summing is a mixer's job, stated explicitly in the patch.
     fn process(&mut self, ctx: &mut ProcessCtx);
     fn reset(&mut self);
+
+    /// The loudest sample this module saw in the last block, if it measures
+    /// one. Only the terminal output does; everything else is not metered and
+    /// returns `None`.
+    ///
+    /// It exists because the number worth showing on a meter is not the one
+    /// that leaves the graph. The terminal output measures *before* its soft
+    /// clip, so the meter can show how hard the clipper is working; a
+    /// post-clip reading is compressed towards `tanh(1.5) = 0.905` and cannot
+    /// rise past it, which is what left this instrument's clip warning unable
+    /// to fire at all.
+    fn peak(&self) -> Option<f32> {
+        None
+    }
 }

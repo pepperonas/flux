@@ -32,6 +32,9 @@ pub struct AudioEngine {
     modules: Vec<Box<dyn Module>>,
     voice_buffer: usize,
     output_buffer: usize,
+    /// Index of the terminal module in `modules`, so its own metering can be
+    /// read after the block has run. See `Module::peak`.
+    output_module: usize,
     out: Vec<f32>,
 
     test_tone: bool,
@@ -154,6 +157,11 @@ impl AudioEngine {
             .find(|s| s.module == output)
             .and_then(|s| s.outputs[0])
             .expect("the output module has an audio output port");
+        let output_module = patch
+            .nodes()
+            .iter()
+            .position(|n| n.id == output)
+            .expect("the output module is in the patch");
 
         AudioEngine {
             sample_rate,
@@ -167,6 +175,7 @@ impl AudioEngine {
             modules: module_list,
             voice_buffer,
             output_buffer,
+            output_module,
             out: vec![0.0; max_block],
             test_tone: false,
             test_phase: 0.0,
@@ -244,11 +253,18 @@ impl AudioEngine {
         );
 
         self.out[..frames].copy_from_slice(&self.pool.buffer(self.output_buffer)[..frames]);
-        self.telemetry.set_peak(
+        // The terminal module measures its own peak *before* its soft clip,
+        // which is the number a meter and a clip warning need: the block that
+        // actually leaves the graph has already been squashed towards
+        // tanh(1.5) = 0.905 and can never say how hard the clipper is working.
+        // If a terminal module ever declines to measure one, fall back to what
+        // did leave, rather than reporting silence.
+        let peak = self.modules[self.output_module].peak().unwrap_or_else(|| {
             self.out[..frames]
                 .iter()
-                .fold(0.0f32, |a, b| a.max(b.abs())),
-        );
+                .fold(0.0f32, |a, b| a.max(b.abs()))
+        });
+        self.telemetry.set_peak(peak);
 
         self.telemetry
             .set_active_voices(self.voices.active_count() as u32);
