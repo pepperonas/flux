@@ -37,27 +37,48 @@ rather than on something that would need replacing.
 **Not in M1:** MIDI, guitar, drums, patterns, scenes, cable editing, presets on
 disk, onboarding.
 
+M1 deliberately depends on **no external hardware**. It must be fully playable on
+a bare laptop, both because that is the honest zero-setup path and because it
+must not be blocked waiting for a delivery.
+
 **Done when:** launch → play the computer keyboard → hear a convincing synth →
 press record → play → press record → the loop runs in time → record a second
 track over it → both stay locked. No mouse required for any of it.
 
 ---
 
-## M2 — Control stack: MIDI, mapping, learn, macros
+## M2 — Control stack: MIDI, surfaces, mapping, learn, macros
 
 Phase-2 §21 items 2–5. Only now does mapping have something worth mapping to.
 
-* `midir` input: keyboards, pads, knobs, faders; device list in Settings
-* Mapping UI: what is bound to what, change it, remove it
-* **Learn mode**: press Learn → move any control (key, CC, later a fret) → FLUX
-  names it → pick a target → save. One implementation covers every source,
-  because they all speak `ControlId`
-* Full macro set: BRIGHT · DARK · WET · DRY · ENERGY · CHAOS · DENSITY · SPACE
-* Mappings and macro assignments persist to disk
-* MIDI **input only**. Output is explicitly deferred — see the deferred table
+**MIDI is bidirectional here.** An earlier revision of this roadmap deferred MIDI
+output on the grounds that nothing consumed it. The Launchkey Mini MK4 does —
+pads, screen and encoder positions are all output — so that decision is reversed.
 
-**Done when:** a MIDI knob moves a filter, the assignment survives a restart, and
-it was made without editing a file.
+* `midir` input **and output**; device list in Settings
+* `ControlSurface` trait: connect / render / disconnect, with per-control rate
+  limiting and a guaranteed clean disconnect, including on panic
+* **Launchkey Mini MK4 profile** — DAW-mode handshake, 16 RGB pads showing loop
+  and drum state, 8 encoders driven relative onto the macros, parameter names on
+  the OLED, touch-to-reveal, key and scale pushed to the device
+* MIDI clock output, so the device's hardware-synced pad flashing lands on the
+  beat for free
+* Mapping UI: what is bound to what, change it, remove it
+* **Learn mode**: press Learn → move any control (key, CC, pad, later a fret) →
+  FLUX names it → pick a target → save. One implementation covers every source,
+  because they all speak `ControlId`
+* Full macro set: BRIGHT · DARK · WET · DRY · ENERGY · CHAOS · DENSITY · SPACE,
+  unipolar or bipolar
+* Mappings, macro assignments and device profiles persist to disk
+
+Built against the published protocol and accepted on the physical device, which
+is expected within days. Protocol details are in
+[CONTROLLER_MAPPING.md](CONTROLLER_MAPPING.md), including the parts that are
+still assumed rather than verified.
+
+**Done when:** the Launchkey's pads show what the looper is doing, an encoder
+moves a macro without a jump, the OLED names it, and a mapping made by moving a
+knob survives a restart — none of it requiring a file to be edited.
 
 ---
 
@@ -127,6 +148,6 @@ worth far more once there is something to modulate it with.
 |---|---|
 | Audio-rate looper tracks | Needs microphone input; event tracks cover the current goal |
 | Sub-block command timestamps | Only matters once the guitar lands; the field already exists |
-| MIDI output (notes, clock) | Nothing consumes it yet; it becomes worthwhile once FLUX drives external gear |
-| MIDI clock sync | Requires the transport to follow an external master — a design of its own |
+| MIDI clock **input** / external sync | Requires the transport to follow an external master — a design of its own. Clock *output* ships in M2 |
+| Launchkey Custom Modes | The stock DAW-mode surface covers the current needs; custom modes are a second mapping layer to design later |
 | Cargo workspace split | Mechanical when it becomes worthwhile; no benefit today |

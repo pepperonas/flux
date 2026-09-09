@@ -105,7 +105,7 @@ The heart of requirement §2/§4/§20 of the Phase-2 brief.
 enum ControlId {
     Keyboard(KeyCode),
     Guitar { device: DeviceId, control: GuitarControl }, // Fret(0..4), Strum, Whammy, Tilt, Start, Select, Dpad(..)
-    Midi   { port: MidiPortId, control: MidiControl },   // Note(u7), Cc(u7), PitchBend, Aftertouch
+    Midi   { port: MidiPortId, channel: u4, control: MidiControl }, // Note(u7), Cc(u7), PolyAftertouch(u7), PitchBend
 }
 
 enum ControlValue {
@@ -117,6 +117,11 @@ enum ControlValue {
 
 struct ControlEvent { id: ControlId, value: ControlValue, host_time_ns: u64 }
 ```
+
+The MIDI channel is part of the identity, not a detail. On the Launchkey Mini MK4
+the channel *is* the namespace: pads report on channel 10, encoders on 16, encoder
+touch on 15, device features on 7. Folding the channel away would merge controls
+that are physically different things.
 
 `ControlId` is `Copy + Eq + Hash` — that is what makes learn mode nearly free:
 "remember the next incoming `ControlId`" is three lines, and it works identically
@@ -172,6 +177,42 @@ The audio engine consumes `Action`-derived commands. It has no type in scope
 that mentions a key, a fret or a CC number. That is requirement §20, enforced by
 the module graph rather than by discipline.
 
+### Control surfaces are bidirectional
+
+An input source that only *produces* events is not enough. A modern controller
+carries state: RGB pads, a screen, encoders that must be told where they are.
+FLUX therefore has a second trait on top of the source:
+
+```rust
+trait ControlSurface: InputSource {
+    fn connect(&mut self);                      // handshake, put the device in the right modes
+    fn render(&mut self, state: &SurfaceState); // FLUX state → LEDs, screen, encoder positions
+    fn disconnect(&mut self);                   // hand the device back to standalone operation
+}
+```
+
+`SurfaceState` is a small, device-agnostic snapshot — loop track states, current
+macro values and names, transport, key and scale, armed track. A surface decides
+for itself how to show it. A device with no feedback (the guitar) implements
+`render` as a no-op; nothing else in FLUX changes.
+
+`render` runs on the surface's own thread at a modest rate (~30 Hz) and is
+rate-limited per control: a MIDI surface that redraws sixteen pads every frame
+floods a 31.25 kbaud DIN port and its own USB endpoint. Only changed cells are
+sent.
+
+`disconnect` matters more than it looks. A device left in DAW mode after FLUX
+exits is a device that behaves oddly in the user's other software. Restoring it
+is part of shutting down cleanly, including on panic.
+
+#### Device profiles
+
+Which physical control carries which `ControlId`, and how state is rendered back,
+lives in a **device profile** — data, not code, keyed by USB/MIDI identity.
+Profiles ship for known hardware and are learnable for unknown hardware through
+the same wizard the guitar uses. See [CONTROLLER_MAPPING.md](CONTROLLER_MAPPING.md)
+for the two profiles that exist today and for what is verified versus assumed.
+
 ---
 
 ## 4. Parameter system and modulation matrix
@@ -204,7 +245,14 @@ struct Macro { id: MacroId, name: &'static str, targets: Vec<(ParamId, f32 /*dep
 
 `BRIGHT · DARK · WET · DRY · ENERGY · CHAOS · DENSITY · SPACE`. `CHAOS` raising
 pattern variation, LFO amount, FX modulation and rhythmic variation at once is
-simply four target rows. Because the looper is event-based (§7), turning a macro
+simply four target rows.
+
+A macro may be **unipolar** (`0..1`) or **bipolar** (`-1..+1`). The brief's names
+come in opposing pairs — bright/dark, wet/dry, calm/chaotic, simple/complex — and
+those are one axis each, with the displayed name following the sign. This is not
+a reinterpretation for its own sake: endless encoders have no end stop, so a
+centre-detented axis is the control they are physically built for. All eight
+names survive; four of them are the negative half of an axis. Because the looper is event-based (§7), turning a macro
 also re-voices material you already recorded — that is the intended "this is not
 normal music software" moment.
 
@@ -442,10 +490,14 @@ src/
 │   ├── command.rs            AudioCommand
 │   └── telemetry.rs          atomics + counters
 ├── input/
-│   ├── source.rs             trait InputSource
-│   ├── keyboard.rs
+│   ├── source.rs             trait InputSource, trait ControlSurface, SurfaceState
+│   ├── keyboard.rs           computer keyboard (no feedback)
 │   ├── xinput.rs             rusb reader thread (Xbox 360 / X-plorer)
-│   ├── midi.rs               midir
+│   ├── midi.rs               midir in + out, port discovery
+│   ├── surfaces/
+│   │   ├── launchkey_mk4.rs  DAW handshake, pad LEDs, encoders, OLED, scale push
+│   │   └── generic_midi.rs   class-compliant fallback, no feedback
+│   ├── profile.rs            device profiles as data, keyed by USB/MIDI identity
 │   ├── mapping.rs            ControlId → Binding, ArcSwap snapshot
 │   └── learn.rs
 ├── ui/
@@ -496,7 +548,7 @@ guarantee.
 | `crossbeam-channel` | non-realtime GUI-side messaging | — |
 | `arc-swap` | wait-free mapping snapshot for input threads | `RwLock` in an input hot path risks priority inversion |
 | `rusb` (`vendored`) | the guitar is **not** HID; raw USB is the only route on macOS | `hidapi`/`gilrs` cannot see this device at all — see §14 |
-| `midir` | cross-platform MIDI in/out | — |
+| `midir` | cross-platform MIDI in **and out** — output drives pad LEDs, the OLED and clock | — |
 | `serde` + `serde_json` | presets, settings, mappings | — |
 | `directories` | correct config paths per OS | — |
 | `thiserror` / `anyhow` | typed errors in libraries, context at the edges | — |
@@ -530,6 +582,10 @@ No kernel driver has claimed the interface (`IOCFPlugInTypes` shows the generic
 is verified by a ~30-line probe as the **first implementation task**, before
 anything is built on top of it.
 
+Full protocol notes for this device and for the Launchkey Mini MK4 — including
+what is verified and what is still assumed — are in
+[CONTROLLER_MAPPING.md](CONTROLLER_MAPPING.md).
+
 Button and axis assignments are **not guessed**. The setup wizard (brief §6)
 learns them by diffing report bytes while the user presses each control. This
 doubles as insurance against this particular unit deviating from the documented
@@ -553,3 +609,8 @@ layout.
 | 10 | Fixed patch in M1, read-only patch view | Cable editing in M1 | Shows real signal flow early without the editing complexity |
 | 11 | Synthesised drums, no samples | Sample library | No third-party rights, no assets to ship (brief §26) |
 | 12 | Loop length in whole bars, first track is master | Free-length loops | Makes desynchronisation structurally impossible |
+| 13 | **MIDI output is load-bearing** (reversal) | MIDI input only | Was justified with "nothing consumes it yet". The Launchkey Mini MK4 does: pads, screen and encoder positions are all output. Reversed the same day it was written |
+| 14 | `ControlSurface` trait on top of `InputSource` | One-directional input only | Modern controllers carry state; a source that cannot render it back leaves the hardware half dead |
+| 15 | Encoders driven in **relative** mode | Absolute + host-pushed position | Switching macro pages would otherwise jump values. Relative is structurally jump-free; the screen carries the readout instead |
+| 16 | Macros may be bipolar | Eight independent unipolar macros | The brief's names are opposing pairs, and endless encoders have no end stop — a centred axis is what the hardware is for |
+| 17 | FLUX owns key and scale, and pushes them to the device | Let the controller's scale mode run independently | One source of truth; also makes §15 musical safety physical — out-of-key keys stop responding on the hardware |

@@ -38,8 +38,10 @@ nobody has thought of yet.
   a reason, not a crash
 * **Macros** — `BRIGHT` `DARK` `WET` `DRY` `ENERGY` `CHAOS` `DENSITY` `SPACE`
   move many parameters at once, so you steer the music instead of adjusting it
-* **Controllers** — computer keyboard, Guitar Hero / Xbox 360 guitar over raw
-  USB, MIDI in; anything mappable to anything, learnable by moving it
+* **Controllers** — computer keyboard, Novation Launchkey Mini MK4 (RGB pads
+  showing loop state, encoders on the macros, parameter names on its screen),
+  Guitar Hero / Xbox 360 guitar over raw USB, and generic MIDI. Anything is
+  mappable to anything, and mappings are made by moving the control
 * **Generative patterns** — constrained by scale, key and density, so variation
   stays musical
 
@@ -70,13 +72,17 @@ package is needed for controller support.
 Platforms: macOS and Windows are targets; Linux follows. Development happens on
 macOS (Apple Silicon).
 
-### Controllers on macOS
+### Controllers
 
 Xbox 360 guitars are **not** HID devices — they use a vendor-specific interface
 (`0xFF/0x5D/0x01`). No HID library can see them on macOS. FLUX talks to
 interface 0 over raw USB directly, so no driver or kernel extension is required.
 Button and axis positions are *learned* through the setup wizard rather than
 assumed, so unusual units work too.
+
+Class-compliant MIDI devices need no setup at all. Known controllers get a
+profile that drives their lights and screens; unknown ones fall back to the same
+learning wizard.
 
 ## Development
 
@@ -99,6 +105,7 @@ test fail, restore it. A test that has never been seen to fail is not a guarante
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Threads, control layer, modulation matrix, audio graph, looper, decision log |
 | [docs/ROADMAP.md](docs/ROADMAP.md) | Milestones and what "done" means for each |
 | [docs/PHASE2.md](docs/PHASE2.md) | Why the control abstraction was built in rather than retrofitted |
+| [docs/CONTROLLER_MAPPING.md](docs/CONTROLLER_MAPPING.md) | Device protocols and default mappings, marked verified / documented / assumed |
 
 ## Licence
 

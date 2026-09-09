@@ -44,7 +44,7 @@ architecture in [ARCHITECTURE.md](ARCHITECTURE.md) is the Phase-2 architecture.
 | 8 | Performance vs. Patch | ARCHITECTURE §8 — two top-level views from M1 |
 | 9–10 | Guitar as an instrument, interaction model | `InputChord`; ROADMAP M3 |
 | 11 | Macro system | ARCHITECTURE §4 — macros are modulation rows, not a parallel system |
-| 12 | MIDI controllers | ROADMAP M2 |
+| 12 | MIDI controllers | ROADMAP M2, bidirectional — see [CONTROLLER_MAPPING.md](CONTROLLER_MAPPING.md) |
 | 13–14 | Mapping UI, learn mode | ARCHITECTURE §3 — learn is "remember the next `ControlId`", identical for every source |
 | 15 | Musical safety | ROADMAP M5 — constrained generation, advanced mode widens |
 | 16 | Live safety | ARCHITECTURE §9 — the audio thread cannot see USB or MIDI, so a disconnect cannot reach it |
@@ -71,6 +71,37 @@ It does not. Chosen: **sound first** — M1 delivers the brief's §39 milestone
 (keyboard → synth → loop) on top of the full Phase-2 control and graph
 infrastructure. Mapping and learn mode arrive in M2, once there is something
 worth mapping to.
+
+## Revision: the Launchkey Mini MK4
+
+After this analysis was written, a Novation Launchkey Mini 25 MK4 was ordered.
+It is not merely another MIDI keyboard, and it invalidated a decision made the
+same day.
+
+The roadmap had deferred MIDI output with the justification *"nothing consumes it
+yet"*. This device does: 16 RGB pads, a host-writable OLED and encoders that must
+be told where they point are all output. Without it the hardware is half dead.
+MIDI output moved from deferred to load-bearing.
+
+The architectural gap it exposed is more interesting than the reversal. The
+`InputSource` trait is one-directional — device to FLUX. A device that carries
+state needs the return path, so surfaces gained a second trait
+(`ControlSurface`: connect / render / disconnect) and devices gained **profiles**
+as data rather than code. That generalises beyond this purchase: a Launchpad, an
+APC or future hardware are the same shape, and the guitar is the degenerate case
+whose `render` does nothing.
+
+Two consequences were worth having:
+
+* The device's pad flashing is **hardware-synchronised to MIDI beat clock**. If
+  FLUX sends clock, a recording pad blinks in time with the music and no timing
+  code is written for it.
+* The host can set the keyboard's **scale tonic and type**. FLUX owns key and
+  scale and pushes them down, so notes outside the key stop responding on the
+  hardware itself. Requirement §15, musical safety, becomes physical rather than
+  advisory — which software alone cannot achieve.
+
+Milestone order was unchanged: M1 still depends on no external hardware.
 
 ## Implementation plan
 
