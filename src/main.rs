@@ -6,6 +6,7 @@
 
 mod app;
 mod core;
+mod input;
 mod ui;
 
 fn main() -> eframe::Result<()> {
