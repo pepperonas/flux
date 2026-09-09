@@ -149,15 +149,27 @@ An `InputChord` is a set of currently-held `ControlId`s plus a triggering one �
 this is how "hold fret + strum", "Green+Red = bass with distortion" and
 "modifier + fret = switch pattern" are all expressed by one structure (§8/§10).
 
-Resolution is a **pure function**, and it is the single most heavily tested piece
-of the codebase:
+Resolution is one function, and it is the single most heavily tested piece of the
+codebase:
 
 ```rust
-fn resolve(mapping: &Mapping, held: &HeldSet, ev: ControlEvent) -> ActionList
+fn resolve(mapping: &Mapping, held: &mut HeldSet, play: &PlayState, event: &ControlEvent)
+    -> Vec<Action>
 ```
 
-No audio, no GUI, no I/O. Every interaction rule in FLUX is a property of this
-function and can be asserted in a unit test.
+No audio, no GUI, no I/O, no global state: the result and the new held-state are
+fully determined by the arguments. Every interaction rule in FLUX is a property of
+this function and can be asserted in a unit test.
+
+`held` is taken by `&mut` rather than `&`, which is a deliberate retreat from a
+strictly pure signature. The reason is a defect this design already produced once:
+a note's pitch depends on the octave at the moment it was pressed, so a release
+must emit the note that was *started*, not one recomputed from whatever the octave
+is now. Changing octave while a key is held otherwise strands that note, sounding
+forever with no note-off — and the instrument has no panic action to recover with.
+Recording the started note inside `resolve` makes that impossible to get wrong.
+The alternative, leaving the caller to record it, puts a correctness-critical step
+somewhere that forgetting it is silent.
 
 ### Actions
 
