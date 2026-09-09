@@ -9,12 +9,24 @@ pub struct Smoother {
 
 impl Smoother {
     pub fn new(sample_rate: f32, time_ms: f32) -> Self {
-        let samples = (time_ms / 1000.0 * sample_rate).max(1.0);
         Smoother {
             current: 0.0,
             target: 0.0,
-            coeff: 1.0 - (-1.0 / samples).exp(),
+            coeff: Smoother::coeff(sample_rate, time_ms),
         }
+    }
+
+    fn coeff(sample_rate: f32, time_ms: f32) -> f32 {
+        let samples = (time_ms / 1000.0 * sample_rate).max(1.0);
+        1.0 - (-1.0 / samples).exp()
+    }
+
+    /// Retune for a different sample rate without disturbing the value being
+    /// smoothed. Rebuilding with `new` would reset `current` to zero, which on
+    /// a device change would fade whatever is being smoothed to silence and
+    /// back for no reason.
+    pub fn set_time(&mut self, sample_rate: f32, time_ms: f32) {
+        self.coeff = Smoother::coeff(sample_rate, time_ms);
     }
 
     pub fn set_target(&mut self, v: f32) {

@@ -1,8 +1,29 @@
 use crate::audio::dsp::{Adsr, AdsrParams, Osc, Svf, Waveform};
 use crate::core::music::note_to_freq;
 use crate::params::registry::{self as p, ParamRegistry, PARAM_COUNT};
+use crate::params::smoothing::Smoother;
 
 pub const VOICE_COUNT: usize = 16;
+
+/// Time constant for the polyphony scale glide, in milliseconds.
+///
+/// Chosen at the architecture's stated one-pole smoothing time (§4, "one-pole,
+/// ~5 ms"), and the two ends of the range were checked rather than assumed.
+///
+/// Fast enough not to pump: a one-pole is ~95 % settled after three time
+/// constants, so 5 ms is finished in 15 ms. Even a violent tremolo puts notes
+/// 60 ms apart, so the scale is always at rest again before the next note
+/// changes it - there is no accumulating lag to hear as pumping, and no chord
+/// held with the level still visibly on its way somewhere.
+///
+/// Slow enough to remove the step: the largest jump this factor can make in
+/// ordinary play is one note added to one already sounding, 1.0 to 0.7071.
+/// Spread over a 5 ms one-pole at 48 kHz that is 0.0012 of gain in the first
+/// sample instead of 0.2929 - a 240-fold reduction, and the transition's
+/// energy above 4 kHz (where a click actually lives) is some 42 dB down on the
+/// step's, because a one-pole's step response rolls off at 6 dB per octave
+/// above 1/(2*pi*tau) = 32 Hz while a true step does not roll off at all.
+const SCALE_GLIDE_MS: f32 = 5.0;
 
 /// A block's resolved parameter values, normalised 0..1, indexed by `ParamId`.
 /// A fixed array so it can be passed into the audio path without allocating.
@@ -134,13 +155,29 @@ impl Voice {
 pub struct VoicePool {
     pub voices: [Voice; VOICE_COUNT],
     next_age: u64,
+    /// The polyphony scale actually applied, glided rather than stepped.
+    scale: Smoother,
+    /// The sample rate `scale`'s coefficient was computed for, so a device
+    /// change retunes it instead of silently smoothing over the wrong span.
+    scale_rate: f32,
+    /// Whether the previous block produced any voice output. A scale change
+    /// is only discontinuous if there was already something for it to be
+    /// discontinuous against.
+    sounded: bool,
 }
 
 impl Default for VoicePool {
     fn default() -> Self {
+        let mut scale = Smoother::new(48_000.0, SCALE_GLIDE_MS);
+        // The scale for a silent pool is 1.0, not 0.0: starting at zero would
+        // fade the first note in over 5 ms it did not ask for.
+        scale.snap(1.0);
         VoicePool {
             voices: std::array::from_fn(|_| Voice::default()),
             next_age: 0,
+            scale,
+            scale_rate: 48_000.0,
+            sounded: false,
         }
     }
 }
@@ -200,14 +237,47 @@ impl VoicePool {
         for v in self.voices.iter_mut() {
             v.render(out, params, sample_rate);
         }
+
         // Sixteen voices at full level would sum to sixteen. Scaling by the
         // square root of the count keeps a chord roughly as loud as a single
-        // note without ducking audibly as notes are added.
-        let active = self.active_count().max(1) as f32;
-        let scale = 1.0 / active.sqrt();
-        for s in out.iter_mut() {
-            *s *= scale;
+        // note.
+        //
+        // That factor changes whenever the voice count does, and applying the
+        // new one to a whole block is a step: with one note sustaining, adding
+        // a second multiplied the buffer by 1/sqrt(2) between the last sample
+        // of one block and the first of the next. Measured at a 512-frame
+        // block, that moved the signal 0.164 in one sample where the waveform
+        // itself was moving 0.014 - twelve times its own slope, which is a
+        // click, not a duck. Playing a chord one finger at a time is the first
+        // thing anyone does with a synth, so the factor is glided to its new
+        // value one sample at a time instead.
+        let active = self.active_count();
+        let target = 1.0 / (active.max(1) as f32).sqrt();
+
+        if self.scale_rate != sample_rate {
+            self.scale_rate = sample_rate;
+            self.scale.set_time(sample_rate, SCALE_GLIDE_MS);
         }
+
+        if self.sounded {
+            self.scale.set_target(target);
+            for s in out.iter_mut() {
+                *s *= self.scale.next();
+            }
+        } else {
+            // Nothing was sounding last block, so there is no signal for the
+            // change to be discontinuous against - and gliding here would be
+            // actively worse than useless. A four-note chord struck from
+            // silence would start at the one-voice scale and duck into place,
+            // pushing roughly four times the intended level into the master
+            // clipper on the way. Snapping is both inaudible and safer.
+            self.scale.snap(target);
+            for s in out.iter_mut() {
+                *s *= target;
+            }
+        }
+
+        self.sounded = active > 0;
     }
 }
 
@@ -473,6 +543,14 @@ mod tests {
         // land near sqrt(N) - not near N (no compensation at all) and not
         // flat at 1 (the pool ducking to a fixed level regardless of count).
         //
+        // This test is also what pins the "snap from silence" half of the
+        // scale glide (see `VoicePool::render`): `peak_after` builds a fresh
+        // pool for every measurement, so nothing was sounding beforehand and
+        // the scale must already be at 1/sqrt(N) on the very first sample.
+        // Make the glide unconditional and `ratio_four` reads 4.0 instead of
+        // 2.0 - the chord starts at the one-voice scale and ducks into place,
+        // which is both audible and four times too loud into the clipper.
+        //
         // Measured within the first few samples deliberately: this is
         // before the different oscillator frequencies have drifted far
         // enough apart in phase to disturb the sum, and before the shared
@@ -517,6 +595,123 @@ mod tests {
         assert!(
             (ratio_sixteen - 4.0).abs() < 1.0,
             "sixteen voices were {ratio_sixteen:.3}x one voice, expected close to sqrt(16) = 4.0"
+        );
+    }
+    #[test]
+    fn adding_a_note_to_a_held_one_does_not_step_the_signal() {
+        // Playing a chord one finger at a time is the first thing anyone does
+        // with a synth, and the polyphony scale used to make it click: with
+        // note 60 sustaining, the arrival of a second voice multiplied the
+        // whole buffer by 1/sqrt(2) between the last sample of one block and
+        // the first of the next.
+        //
+        // The artefact is isolated by running the identical scenario twice -
+        // once pressing a second key at the block boundary, once not - and
+        // comparing the first sample of the block that follows. The second
+        // voice's own envelope is still at zero on that sample (attack
+        // defaults to 5 ms = 240 samples), so any difference between the two
+        // runs is the scale factor moving, and nothing else. That makes the
+        // measurement independent of where in the waveform's cycle the
+        // boundary happens to fall, which a bare sample-to-sample delta is
+        // not.
+        //
+        // Measured: without the glide the difference is 29.29 % of the sample
+        // - exactly 1 - 1/sqrt(2) - at every block size. With it, 0.12 %.
+        fn first_sample_after_boundary(block: usize, press_second_key: bool) -> f32 {
+            let mut pool = VoicePool::default();
+            let mut buf = vec![0.0f32; block];
+            pool.note_on(60, 1.0, SR);
+            for _ in 0..40 {
+                buf.fill(0.0);
+                pool.render(&mut buf, &params(), SR);
+            }
+            if press_second_key {
+                pool.note_on(64, 1.0, SR);
+            }
+            buf.fill(0.0);
+            pool.render(&mut buf, &params(), SR);
+            buf[0]
+        }
+
+        for block in [64usize, 128, 256, 512] {
+            let alone = first_sample_after_boundary(block, false);
+            let chord = first_sample_after_boundary(block, true);
+            assert!(
+                alone.abs() > 1e-3,
+                "block {block}: nothing was sounding to be discontinuous, \
+                 the measurement proves nothing"
+            );
+            let artefact = (chord - alone).abs() / alone.abs();
+            assert!(
+                artefact < 0.01,
+                "block {block}: pressing a second key moved the signal by \
+                 {:.2} % in one sample ({alone:+.5} -> {chord:+.5}); an \
+                 unglided scale factor gives 29.29 %",
+                artefact * 100.0
+            );
+        }
+    }
+
+    #[test]
+    fn the_scale_glide_settles_rather_than_lagging_behind_fast_playing() {
+        // The other half of the time-constant choice. A glide still moving
+        // when the next note lands turns every fast passage into audible
+        // pumping, so the factor has to be at rest again long before a person
+        // can play the next note. A one-pole is ~95 % settled after three time
+        // constants, which for 5 ms is 15 ms.
+        //
+        // The factor is read out of the pool rather than assumed: two pools
+        // play note 60 identically, and one of them additionally starts a
+        // voice at velocity 0. That voice contributes exactly nothing to the
+        // sum (`amp = level * velocity`) but does raise the voice count, so
+        // the ratio between the two pools' output IS the scale factor, sample
+        // for sample, with no other difference to confuse it.
+        fn scale_after(frames: usize) -> f32 {
+            let mut alone = VoicePool::default();
+            let mut with_extra = VoicePool::default();
+            let mut a = vec![0.0f32; 512];
+            let mut b = vec![0.0f32; 512];
+            for pool in [&mut alone, &mut with_extra] {
+                pool.note_on(60, 1.0, SR);
+            }
+            for _ in 0..40 {
+                a.fill(0.0);
+                b.fill(0.0);
+                alone.render(&mut a, &params(), SR);
+                with_extra.render(&mut b, &params(), SR);
+            }
+            with_extra.note_on(64, 0.0, SR);
+
+            let mut a = vec![0.0f32; frames];
+            let mut b = vec![0.0f32; frames];
+            alone.render(&mut a, &params(), SR);
+            with_extra.render(&mut b, &params(), SR);
+            let last_a = *a.last().unwrap();
+            assert!(
+                last_a.abs() > 1e-3,
+                "the reference voice was silent, the ratio means nothing"
+            );
+            b.last().unwrap() / last_a
+        }
+
+        let target = 1.0 / 2.0f32.sqrt();
+        // One sample in, the factor has barely moved - that is the whole point
+        // of the glide, and what makes the added note inaudible as a step.
+        let immediate = scale_after(1);
+        assert!(
+            immediate > 0.99,
+            "the scale jumped to {immediate:.4} within one sample of the \
+             second voice arriving; that is the step this glide exists to \
+             remove"
+        );
+        // Fifteen milliseconds in, it has arrived.
+        let settled = scale_after(720);
+        let remaining = (settled - target).abs() / (1.0 - target);
+        assert!(
+            remaining < 0.05,
+            "after 15 ms the scale was {settled:.4}, still {:.1} % short of \
+             its target {target:.4} - a glide that slow pumps on fast playing",
+            remaining * 100.0
         );
     }
 }
