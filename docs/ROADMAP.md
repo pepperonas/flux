@@ -1,0 +1,132 @@
+# FLUX — Roadmap
+
+Each milestone ends with `cargo check`, `cargo test` and `cargo run` all working
+and the application in a state a person can actually play. A milestone is done
+when someone unfamiliar can use it, not when it compiles.
+
+The ordering merges the original phase plan (brief §33) with the Phase-2
+priority list (§21). Where they disagree, the reason is stated.
+
+---
+
+## M1 — Foundation, sound, loop  ← current target
+
+**Goal: press a key, hear a synth, record a loop that stays in time.**
+This is the brief's §39 definition of done, built on the Phase-2 architecture
+rather than on something that would need replacing.
+
+* Cargo project, window, dark theme, view shell (Performance / Patch / Settings)
+* Event and control layer complete: `ControlId` · `ControlValue` · `ControlEvent`
+  · `Action` · `Mapping` · `resolve()` — with the keyboard as the first source
+* Parameter registry, smoothing, modulation matrix, macro definitions
+* Graph infrastructure: `Module` trait, typed ports, signal-compatibility matrix,
+  cycle detection, topological scheduling, buffer pool
+* Two-zone engine with a **fixed** default patch: OSC → FILTER → VCA (×16) →
+  MIXER → DELAY → REVERB → OUTPUT, plus LFO and envelopes
+* PolyBLEP oscillators, TPT state-variable filter, ADSR, voice allocator
+* CPAL host: device enumeration, device selection, latency display
+* Transport, click, sample-accurate position
+* Event looper: 4 tracks, arm/record/overdub/undo/mute/clear, bar-quantized
+  length, `1/16` default quantization
+* Performance view: loop lanes with live position, BPM, key/scale, three macro
+  knobs (BRIGHT · CHAOS · WET), active-note feedback, output meter
+* Patch view, read-only: real modules, real connections, live signal activity
+* Diagnostics view with latency, load, voices, dropped events, underruns
+* Help overlay (`?`)
+
+**Not in M1:** MIDI, guitar, drums, patterns, scenes, cable editing, presets on
+disk, onboarding.
+
+**Done when:** launch → play the computer keyboard → hear a convincing synth →
+press record → play → press record → the loop runs in time → record a second
+track over it → both stay locked. No mouse required for any of it.
+
+---
+
+## M2 — Control stack: MIDI, mapping, learn, macros
+
+Phase-2 §21 items 2–5. Only now does mapping have something worth mapping to.
+
+* `midir` input: keyboards, pads, knobs, faders; device list in Settings
+* Mapping UI: what is bound to what, change it, remove it
+* **Learn mode**: press Learn → move any control (key, CC, later a fret) → FLUX
+  names it → pick a target → save. One implementation covers every source,
+  because they all speak `ControlId`
+* Full macro set: BRIGHT · DARK · WET · DRY · ENERGY · CHAOS · DENSITY · SPACE
+* Mappings and macro assignments persist to disk
+* MIDI **input only**. Output is explicitly deferred — see the deferred table
+
+**Done when:** a MIDI knob moves a filter, the assignment survives a restart, and
+it was made without editing a file.
+
+---
+
+## M3 — The guitar as an instrument
+
+Phase-2 §21 item 1 completed for hardware, plus item 9.
+
+* Raw USB reader thread (`rusb`, interface 0, ~1 kHz), reconnect-safe
+* Controller setup wizard: learns frets, strum, whammy, tilt by diffing reports
+* Controller debug view with live values
+* Interaction model: `InputChord` — hold fret + strum, modifier + fret, fret +
+  whammy — fully remappable
+* Whammy and tilt as continuous modulation sources through the mod matrix
+* Hot-plug: connect and disconnect mid-performance without touching audio
+
+**Done when:** the guitar is unplugged mid-loop and the music does not falter.
+
+---
+
+## M4 — Patchable graph and Patch View editing
+
+Phase-2 §21 items 6–7. Deliberately after the control stack: an editable patch is
+worth far more once there is something to modulate it with.
+
+* Cable editing: drag output → input, invalid connections refused with a reason
+* Add, remove and move modules; live re-compile of the schedule
+* Animated signal flow, visible modulation depth
+* Patch save/load
+
+---
+
+## M5 — Drums and patterns
+
+* Synthesised drum voices: kick, snare, closed hat, open hat, clap, perc
+* 16/32-step patterns, live triggerable
+* Generative pattern engine constrained by scale, key, octave, density,
+  complexity, rhythm — **musical safety** (§15): the default range cannot
+  produce unusable results; an advanced mode widens it
+* `CHAOS` and `DENSITY` wired to pattern variation
+
+---
+
+## M6 — Scenes, presets, live safety
+
+* Scenes capture patch, params, macros, patterns, mapping, BPM
+* Quantized scene changes, interpolated BPM changes
+* Confirmation or held modifier on every destructive action
+* Factory presets: Ambient · Cyber · Industrial · Synthwave · Glitch · Minimal ·
+  Dark · Retro · Experimental — all synthesised, no third-party samples
+* User presets separated from factory presets
+
+---
+
+## M7 — Polish
+
+* Onboarding (skippable), interactive help, contextual tooltips everywhere
+* Visual refinement: motion, glow, beat pulse, spectrum
+* Sampler with user files (`symphonia`)
+* Windows build and packaging; Linux afterwards
+* Accessibility and performance passes
+
+---
+
+## Deferred, with reasons
+
+| Item | Why not yet |
+|---|---|
+| Audio-rate looper tracks | Needs microphone input; event tracks cover the current goal |
+| Sub-block command timestamps | Only matters once the guitar lands; the field already exists |
+| MIDI output (notes, clock) | Nothing consumes it yet; it becomes worthwhile once FLUX drives external gear |
+| MIDI clock sync | Requires the transport to follow an external master — a design of its own |
+| Cargo workspace split | Mechanical when it becomes worthwhile; no benefit today |

@@ -1,0 +1,12 @@
+/target
+**/*.rs.bk
+*.pdb
+
+# runtime state / user content
+/presets/user
+*.fluxpreset.local
+settings.local.json
+
+.DS_Store
+.idea/
+.vscode/
