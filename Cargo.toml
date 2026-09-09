@@ -1,0 +1,26 @@
+[package]
+name = "flux"
+version = "0.1.0"
+edition = "2021"
+description = "A playable live music instrument"
+license = "MIT"
+
+[dependencies]
+eframe = { version = "0.29", default-features = false, features = ["default_fonts", "glow"] }
+egui = "0.29"
+cpal = "0.15"
+crossbeam-queue = "0.3"
+arc-swap = "1"
+serde = { version = "1", features = ["derive"] }
+thiserror = "1"
+log = "0.4"
+env_logger = "0.11"
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+debug = 1
+
+# Audio must never be slow in a debug build, or the app is untestable while developing.
+[profile.dev.package."*"]
+opt-level = 2
