@@ -58,6 +58,25 @@ mod tests {
         out_buf
     }
 
+    /// Like `render`, but writes into a caller-supplied buffer instead of a
+    /// fresh one, so the buffer can be called into repeatedly without being
+    /// cleared in between - the way a real pool buffer behaves (see
+    /// `BufferPool` / `schedule::run`), and unlike `render` above.
+    fn render_into(m: &mut dyn Module, input: Option<&[f32]>, params: &[f32], out_buf: &mut [f32]) {
+        let mut inputs: [Option<&[f32]>; MAX_INPUTS] = [None; MAX_INPUTS];
+        inputs[0] = input;
+        let mut outputs: [Option<&mut [f32]>; MAX_OUTPUTS] = [const { None }; MAX_OUTPUTS];
+        outputs[0] = Some(out_buf);
+        let mut ctx = ProcessCtx {
+            frames: FRAMES,
+            sample_rate: 48_000.0,
+            inputs,
+            outputs,
+            params,
+        };
+        m.process(&mut ctx);
+    }
+
     fn defaults() -> Vec<f32> {
         let reg = ParamRegistry::new();
         (0..PARAM_COUNT)
@@ -96,6 +115,67 @@ mod tests {
         let first = render(m.as_mut(), Some(&a), &defaults());
         let second = render(m.as_mut(), Some(&a), &defaults());
         assert!((first[0] - second[0]).abs() < 1e-6);
+    }
+
+    // The test above is weaker than its name and comment claim: `render()`
+    // allocates a fresh, zeroed `out_buf` on every call, so it cannot tell
+    // `=` from `+=` for a module with no carried state - both read 0.0 as
+    // their starting point regardless of which one `Mixer::process` uses.
+    // Confirmed directly: with `*o += x + y` swapped into `Mixer::process`,
+    // every test in this file that goes through `render()` still passes,
+    // `a_module_overwrites_its_output_rather_than_accumulating` above
+    // included. In production the pool buffer a module writes into is not
+    // cleared between blocks (see `BufferPool::write` / `schedule::run`),
+    // so the two tests below reuse ONE output buffer across two
+    // `process()` calls, uncleared in between, to match that - one for a
+    // stateless module, one for a module with real internal recursive
+    // state, since an accumulation bug in the output write is exactly as
+    // dangerous and exactly as invisible in the second case as the first.
+
+    #[test]
+    fn the_mixer_does_not_accumulate_into_a_reused_output_buffer() {
+        let mut m = make(crate::graph::patch::ModuleKind::Mixer);
+        m.prepare(48_000.0, FRAMES);
+        let a = vec![0.25f32; FRAMES];
+        let params = defaults();
+
+        let mut out_buf = vec![0.0f32; FRAMES];
+        render_into(m.as_mut(), Some(&a), &params, &mut out_buf);
+        render_into(m.as_mut(), Some(&a), &params, &mut out_buf);
+
+        assert!(
+            (out_buf[0] - 0.25).abs() < 1e-6,
+            "output accumulated across calls into a reused buffer: {}",
+            out_buf[0]
+        );
+    }
+
+    #[test]
+    fn the_delay_does_not_accumulate_into_a_reused_output_buffer() {
+        // DELAY_MIX is set to 0.0 so the output is pure dry passthrough
+        // (out[i] = dry[i]), which stays predictable regardless of what the
+        // delay line's internal buffer/feedback state is doing underneath -
+        // that recursive computation still runs on every sample (`self.
+        // buffer[self.write] = ...` is unaffected by `mix`); only its
+        // contribution to *this* output is zeroed by the mix blend. The
+        // line under test, `*o = dry * (1.0 - mix) + wet * mix`, does not
+        // care what `mix` is - it is the same overwrite-vs-accumulate
+        // question as the mixer's, just reached through a recursive module.
+        let mut m = make(crate::graph::patch::ModuleKind::Delay);
+        m.prepare(48_000.0, FRAMES);
+        let mut params = defaults();
+        params[crate::params::registry::DELAY_MIX.0 as usize] = 0.0;
+        let input = vec![0.3f32; FRAMES];
+
+        let mut out_buf = vec![0.0f32; FRAMES];
+        render_into(m.as_mut(), Some(&input), &params, &mut out_buf);
+        render_into(m.as_mut(), Some(&input), &params, &mut out_buf);
+
+        assert!(
+            (out_buf[0] - 0.3).abs() < 1e-6,
+            "output accumulated across calls into a reused buffer: {}",
+            out_buf[0]
+        );
     }
 
     #[test]

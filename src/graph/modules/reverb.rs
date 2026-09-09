@@ -6,10 +6,25 @@ use crate::params::registry::{ParamRegistry, REVERB_MIX, REVERB_SIZE};
 
 /// Four comb filters into two all-passes: a Schroeder reverb.
 ///
-/// Chosen because it is small, well understood, and sounds like a room. Delay
-/// lengths are mutually prime so the combs cannot reinforce each other into a
-/// ringing pitch, and are quoted for 44.1 kHz then scaled by the real sample
-/// rate in `prepare`, so the room does not change size with the audio device.
+/// Chosen because it is small, well understood, and sounds like a room.
+/// `COMB_LENS` are four of Jezar's classic Freeverb tuning lengths - a
+/// widely used, long-serving reference design - quoted for 44.1 kHz and
+/// scaled by the real sample rate in `prepare`, so the room does not
+/// change size with the audio device.
+///
+/// They are **not** mutually prime: every pair shares a factor of at
+/// least 3 (e.g. `gcd(1557, 1422) = 9`, since `1557 = 3²·173` and
+/// `1422 = 2·3²·79`; a previous version of this comment claimed
+/// coprimality and was simply wrong - one `gcd()` call disproves it).
+/// Freeverb's actual defence against audible ringing is proportional
+/// spacing across enough differently-sized combs, arrived at empirically
+/// over decades of use by that design - not number-theoretic
+/// independence between the lengths. Nothing in this codebase has
+/// independently verified this instance to be free of pitched resonance
+/// (no frequency-domain measurement has been run against it here); the
+/// test suite exercises numerical stability - `feedback < 1.0` keeps the
+/// output finite and bounded - which is a different property from the
+/// absence of audible coloration.
 const COMB_LENS: [usize; 4] = [1_557, 1_617, 1_491, 1_422];
 const ALLPASS_LENS: [usize; 2] = [225, 556];
 
