@@ -69,7 +69,6 @@ pub trait Module: Send {
     /// Modules **overwrite** their outputs; they never accumulate into them.
     /// Summing is a mixer's job, stated explicitly in the patch.
     fn process(&mut self, ctx: &mut ProcessCtx);
-    fn reset(&mut self);
 
     /// The loudest sample this module saw in the last block, if it measures
     /// one. Only the terminal output does; everything else is not metered and

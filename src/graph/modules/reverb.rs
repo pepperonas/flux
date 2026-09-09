@@ -58,15 +58,6 @@ impl Module for Reverb {
         self.allpass_pos = [0; 2];
     }
 
-    fn reset(&mut self) {
-        for c in &mut self.combs {
-            c.fill(0.0);
-        }
-        for a in &mut self.allpasses {
-            a.fill(0.0);
-        }
-    }
-
     fn process(&mut self, ctx: &mut ProcessCtx) {
         let frames = ctx.frames;
         match ctx.input(0) {

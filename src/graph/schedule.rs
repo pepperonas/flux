@@ -106,12 +106,6 @@ impl BufferPool {
         &self.bufs[index]
     }
 
-    pub fn clear(&mut self) {
-        for b in &mut self.bufs {
-            b.fill(0.0);
-        }
-    }
-
     /// Hands a buffer's contents in from outside the graph - the engine uses
     /// this to feed the polyphonic voice sum into the mixer.
     ///
@@ -206,7 +200,6 @@ mod tests {
                 out.fill(v);
             }
         }
-        fn reset(&mut self) {}
     }
 
     /// Adds one to whatever arrives, so a missing input is detectable.
@@ -227,7 +220,6 @@ mod tests {
                 }
             }
         }
-        fn reset(&mut self) {}
     }
 
     #[test]

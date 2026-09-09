@@ -47,10 +47,6 @@ impl Module for Output {
         self.scratch = vec![0.0; max_block];
     }
 
-    fn reset(&mut self) {
-        self.peak = 0.0;
-    }
-
     fn peak(&self) -> Option<f32> {
         Some(self.master_peak())
     }

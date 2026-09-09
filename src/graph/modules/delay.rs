@@ -30,11 +30,6 @@ impl Module for Delay {
         self.write = 0;
     }
 
-    fn reset(&mut self) {
-        self.buffer.fill(0.0);
-        self.write = 0;
-    }
-
     fn process(&mut self, ctx: &mut ProcessCtx) {
         let frames = ctx.frames;
         match ctx.input(0) {

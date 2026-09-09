@@ -316,16 +316,24 @@ polyphony stays a property of the engine rather than of the patch.
 ### Modules
 
 ```rust
-trait Module {
-    fn spec(&self) -> &ModuleSpec;             // ports + parameters, static
-    fn prepare(&mut self, ctx: &PrepareCtx);   // sample rate, max block — allocation happens HERE
-    fn process(&mut self, io: &mut ProcessCtx); // realtime, allocation-free
-    fn reset(&mut self);
+trait Module: Send {
+    fn spec(&self) -> &'static ModuleSpec;                 // ports + parameters, static
+    fn prepare(&mut self, sample_rate: f32, max_block: usize); // allocation happens HERE
+    fn process(&mut self, ctx: &mut ProcessCtx);           // realtime, allocation-free
+    fn peak(&self) -> Option<f32> { None }                 // metering, if it measures one
 }
 ```
 
 `prepare` is the only place a module may allocate. `process` receives
-pre-assigned buffer slices and never sees the graph.
+pre-assigned buffer slices and never sees the graph. `peak` is how the terminal
+output reports the level it saw *before* its soft clip, which is the number a
+meter needs — the block that leaves the graph has already been compressed
+towards `tanh(1.5)` and cannot say how hard the clipper is working.
+
+There is deliberately no `reset`. Every module implemented one and nothing ever
+called it, so it was removed rather than left as a body each new module has to
+write for a caller that does not exist. It returns with M4's patch editing and
+§9's `Reset Patch`, which are the first things that need it.
 
 Initial set: `OSCILLATOR · FILTER · ENVELOPE · LFO · VCA · SEQUENCER · DRUM ·
 SAMPLER · MIXER · DELAY · REVERB · DISTORTION · OUTPUT`.

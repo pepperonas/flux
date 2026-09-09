@@ -55,7 +55,6 @@ pub fn macro_source(id: MacroId) -> ModSourceId {
     ModSourceId(id.0 as u16)
 }
 
-pub const LFO_SOURCE_BASE: u16 = MACRO_COUNT as u16;
 pub const MOD_SOURCE_COUNT: usize = MACRO_COUNT + 4;
 
 #[cfg(test)]

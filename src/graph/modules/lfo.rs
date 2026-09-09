@@ -30,10 +30,6 @@ impl Module for Lfo {
 
     fn prepare(&mut self, _sample_rate: f32, _max_block: usize) {}
 
-    fn reset(&mut self) {
-        self.phase = 0.0;
-    }
-
     fn process(&mut self, ctx: &mut ProcessCtx) {
         let read = |id: ParamId| ctx.params.get(id.0 as usize).copied().unwrap_or(0.0);
         let rate = self.registry.denormalize(LFO_RATE, read(LFO_RATE));

@@ -25,11 +25,6 @@ impl Module for Mixer {
         self.scratch_b = vec![0.0; max_block];
     }
 
-    fn reset(&mut self) {
-        // No recursive state: both scratch buffers are fully overwritten
-        // before every use, so there is nothing here to zero between notes.
-    }
-
     fn process(&mut self, ctx: &mut ProcessCtx) {
         let frames = ctx.frames;
         match ctx.input(0) {
