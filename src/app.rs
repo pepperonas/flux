@@ -1,4 +1,6 @@
 use crate::engine::host::AudioHost;
+use crate::input::keyboard::{self, KeyboardSource};
+use crate::input::mapping::Mapping;
 use crate::ui::{self, View};
 
 pub struct FluxApp {
@@ -6,6 +8,8 @@ pub struct FluxApp {
     audio: Option<AudioHost>,
     audio_error: Option<String>,
     test_tone: bool,
+    keyboard: KeyboardSource,
+    mapping: Mapping,
 }
 
 impl FluxApp {
@@ -24,6 +28,8 @@ impl FluxApp {
             audio,
             audio_error,
             test_tone: false,
+            keyboard: KeyboardSource::default(),
+            mapping: keyboard::default_mapping(),
         }
     }
 }
@@ -39,6 +45,14 @@ impl eframe::App for FluxApp {
         // An instrument must redraw continuously: meters and note feedback are live.
         ctx.request_repaint();
 
+        // Read this frame's key events before anything is drawn, so the
+        // panels below always reflect this frame's state. Without a device
+        // there is nowhere for the resulting commands to go, so keyboard
+        // input is only pumped once audio is up.
+        if let Some(host) = &self.audio {
+            self.keyboard.pump(ctx, &self.mapping, &host.telemetry);
+        }
+
         egui::TopBottomPanel::top("nav").show(ctx, |ui| {
             ui.horizontal(|ui| {
                 for view in [View::Performance, View::Debug] {
@@ -53,7 +67,14 @@ impl eframe::App for FluxApp {
         });
 
         egui::CentralPanel::default().show(ctx, |ui| match self.view {
-            View::Performance => ui::performance::show(ui),
+            View::Performance => ui::performance::show(
+                ui,
+                self.keyboard.active_notes(),
+                self.keyboard.play.octave,
+                self.keyboard.play.velocity,
+                self.audio.as_ref().map_or(0.0, |h| h.telemetry.peak()),
+                self.audio.as_ref().map_or(0, |h| h.telemetry.active_voices()),
+            ),
             View::Debug => ui::debug::show(
                 ui,
                 self.audio.as_ref(),
