@@ -114,8 +114,19 @@ impl BufferPool {
 
     /// Hands a buffer's contents in from outside the graph - the engine uses
     /// this to feed the polyphonic voice sum into the mixer.
+    ///
+    /// This runs on the audio thread, so a length mismatch must not panic:
+    /// copies only `min(src.len(), buffer.len())` samples. If `src` is
+    /// longer than the buffer, the excess is dropped. If `src` is shorter,
+    /// only the leading samples are overwritten - the remainder of the
+    /// buffer is left exactly as it was, not cleared. A mismatch is a
+    /// caller bug (the voice-sum length drifting from the block size), and
+    /// the right failure mode for a caller bug on the audio thread is one
+    /// quietly-wrong block, not a crash mid-performance.
     pub fn write(&mut self, index: usize, src: &[f32]) {
-        self.bufs[index][..src.len()].copy_from_slice(src);
+        let dst = &mut self.bufs[index];
+        let n = src.len().min(dst.len());
+        dst[..n].copy_from_slice(&src[..n]);
     }
 }
 
@@ -362,5 +373,32 @@ mod tests {
             .unwrap();
         assert_eq!(pool.buffer(out)[0], 3.0);
         assert_eq!(pool.buffer(out).len(), 64);
+    }
+
+    #[test]
+    fn write_lands_a_source_that_fits_the_buffer() {
+        let mut pool = BufferPool::new(1, 4);
+        pool.write(0, &[1.0, 2.0, 3.0, 4.0]);
+        assert_eq!(pool.buffer(0), &[1.0, 2.0, 3.0, 4.0][..]);
+    }
+
+    #[test]
+    fn write_clamps_a_source_longer_than_the_buffer_instead_of_panicking() {
+        let mut pool = BufferPool::new(1, 4);
+        // Six samples into a four-sample buffer: must not panic, and must
+        // keep only what fits.
+        pool.write(0, &[1.0, 2.0, 3.0, 4.0, 5.0, 6.0]);
+        assert_eq!(pool.buffer(0), &[1.0, 2.0, 3.0, 4.0][..]);
+    }
+
+    #[test]
+    fn write_with_a_short_source_leaves_the_remainder_untouched() {
+        // A caller passing a short slice must not silently believe the tail
+        // was cleared - the untouched samples must survive exactly as they
+        // were before the call.
+        let mut pool = BufferPool::new(1, 4);
+        pool.write(0, &[9.0, 9.0, 9.0, 9.0]);
+        pool.write(0, &[1.0, 2.0]);
+        assert_eq!(pool.buffer(0), &[1.0, 2.0, 9.0, 9.0][..]);
     }
 }
