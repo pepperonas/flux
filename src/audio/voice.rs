@@ -299,6 +299,52 @@ mod tests {
     }
 
     #[test]
+    fn active_pitch_classes_stays_lit_while_a_different_note_of_the_same_class_still_sounds() {
+        // Two keys an octave apart - e.g. the default keyboard mapping's A
+        // (note 60, C4) and K (note 72, C5) - are two different voices that
+        // happen to share a pitch class. Releasing one must not blank that
+        // class while the other is still sounding. This holds structurally
+        // here, for free: the mask is folded fresh from whichever voices
+        // currently hold `Some(note)`, never from a per-class counter a
+        // single `note_off` could decrement to zero regardless of who else
+        // is still holding that class.
+        let mut pool = VoicePool::default();
+        pool.note_on(60, 1.0, SR);
+        pool.note_on(72, 1.0, SR);
+        assert_ne!(pool.active_pitch_classes() & 1, 0, "C should be lit");
+
+        pool.note_off(60);
+        let mut buf = vec![0.0f32; 512];
+        // Long enough for note 60's voice to actually reach idle and free
+        // itself - see `a_released_voice_eventually_becomes_idle_and_free`
+        // for why 400 renders (not the 200 `releasing_a_note_frees_only_
+        // that_voice` above uses for a coarser check) is the value with
+        // headroom for a full release from any envelope stage.
+        for _ in 0..400 {
+            pool.render(&mut buf, &params(), SR);
+        }
+        assert!(
+            pool.voices.iter().all(|v| v.note != Some(60)),
+            "note 60's voice should have gone idle and freed by now"
+        );
+        assert_ne!(
+            pool.active_pitch_classes() & 1,
+            0,
+            "C should still be lit - note 72 is still sounding"
+        );
+
+        pool.note_off(72);
+        for _ in 0..400 {
+            pool.render(&mut buf, &params(), SR);
+        }
+        assert_eq!(
+            pool.active_pitch_classes(),
+            0,
+            "C should go dark once both voices are idle"
+        );
+    }
+
+    #[test]
     fn retriggering_a_sounding_note_reuses_its_voice() {
         // Otherwise holding a key that repeats would consume the whole pool.
         let mut pool = VoicePool::default();

@@ -9,21 +9,49 @@ use crate::input::mapping::{resolve, Binding, HeldSet, Mapping, PlayState};
 pub fn from_egui(key: egui::Key) -> Option<KeyCode> {
     use egui::Key as E;
     Some(match key {
-        E::A => KeyCode::A, E::B => KeyCode::B, E::C => KeyCode::C, E::D => KeyCode::D,
-        E::E => KeyCode::E, E::F => KeyCode::F, E::G => KeyCode::G, E::H => KeyCode::H,
-        E::I => KeyCode::I, E::J => KeyCode::J, E::K => KeyCode::K, E::L => KeyCode::L,
-        E::M => KeyCode::M, E::N => KeyCode::N, E::O => KeyCode::O, E::P => KeyCode::P,
-        E::Q => KeyCode::Q, E::R => KeyCode::R, E::S => KeyCode::S, E::T => KeyCode::T,
-        E::U => KeyCode::U, E::V => KeyCode::V, E::W => KeyCode::W, E::X => KeyCode::X,
-        E::Y => KeyCode::Y, E::Z => KeyCode::Z,
-        E::Num1 => KeyCode::Num1, E::Num2 => KeyCode::Num2, E::Num3 => KeyCode::Num3,
-        E::Num4 => KeyCode::Num4, E::Num5 => KeyCode::Num5, E::Num6 => KeyCode::Num6,
-        E::Num7 => KeyCode::Num7, E::Num8 => KeyCode::Num8, E::Num9 => KeyCode::Num9,
+        E::A => KeyCode::A,
+        E::B => KeyCode::B,
+        E::C => KeyCode::C,
+        E::D => KeyCode::D,
+        E::E => KeyCode::E,
+        E::F => KeyCode::F,
+        E::G => KeyCode::G,
+        E::H => KeyCode::H,
+        E::I => KeyCode::I,
+        E::J => KeyCode::J,
+        E::K => KeyCode::K,
+        E::L => KeyCode::L,
+        E::M => KeyCode::M,
+        E::N => KeyCode::N,
+        E::O => KeyCode::O,
+        E::P => KeyCode::P,
+        E::Q => KeyCode::Q,
+        E::R => KeyCode::R,
+        E::S => KeyCode::S,
+        E::T => KeyCode::T,
+        E::U => KeyCode::U,
+        E::V => KeyCode::V,
+        E::W => KeyCode::W,
+        E::X => KeyCode::X,
+        E::Y => KeyCode::Y,
+        E::Z => KeyCode::Z,
+        E::Num1 => KeyCode::Num1,
+        E::Num2 => KeyCode::Num2,
+        E::Num3 => KeyCode::Num3,
+        E::Num4 => KeyCode::Num4,
+        E::Num5 => KeyCode::Num5,
+        E::Num6 => KeyCode::Num6,
+        E::Num7 => KeyCode::Num7,
+        E::Num8 => KeyCode::Num8,
+        E::Num9 => KeyCode::Num9,
         E::Num0 => KeyCode::Num0,
         E::Space => KeyCode::Space,
-        E::Comma => KeyCode::Comma, E::Period => KeyCode::Period,
-        E::Minus => KeyCode::Minus, E::Plus => KeyCode::Plus,
-        E::Slash => KeyCode::Slash, E::Backslash => KeyCode::Backslash,
+        E::Comma => KeyCode::Comma,
+        E::Period => KeyCode::Period,
+        E::Minus => KeyCode::Minus,
+        E::Plus => KeyCode::Plus,
+        E::Slash => KeyCode::Slash,
+        E::Backslash => KeyCode::Backslash,
         _ => return None,
     })
 }
@@ -32,9 +60,18 @@ pub fn from_egui(key: egui::Key) -> Option<KeyCode> {
 /// and QWERTY: the lower row is the white keys, the upper row the black ones,
 /// arranged as they sit on a piano.
 const NOTE_KEYS: [(KeyCode, i8); 13] = [
-    (KeyCode::A, 0),  (KeyCode::W, 1),  (KeyCode::S, 2),  (KeyCode::E, 3),
-    (KeyCode::D, 4),  (KeyCode::F, 5),  (KeyCode::T, 6),  (KeyCode::G, 7),
-    (KeyCode::Y, 8),  (KeyCode::H, 9),  (KeyCode::U, 10), (KeyCode::J, 11),
+    (KeyCode::A, 0),
+    (KeyCode::W, 1),
+    (KeyCode::S, 2),
+    (KeyCode::E, 3),
+    (KeyCode::D, 4),
+    (KeyCode::F, 5),
+    (KeyCode::T, 6),
+    (KeyCode::G, 7),
+    (KeyCode::Y, 8),
+    (KeyCode::H, 9),
+    (KeyCode::U, 10),
+    (KeyCode::J, 11),
     (KeyCode::K, 12),
 ];
 
@@ -43,11 +80,26 @@ pub fn default_mapping() -> Mapping {
     for (key, semitone) in NOTE_KEYS {
         m.insert(ControlId::Keyboard(key), Binding::Note { semitone });
     }
-    m.insert(ControlId::Keyboard(KeyCode::Z), Binding::Act(Action::OctaveShift(-1)));
-    m.insert(ControlId::Keyboard(KeyCode::X), Binding::Act(Action::OctaveShift(1)));
-    m.insert(ControlId::Keyboard(KeyCode::C), Binding::Act(Action::VelocityShift(-0.1)));
-    m.insert(ControlId::Keyboard(KeyCode::V), Binding::Act(Action::VelocityShift(0.1)));
-    m.insert(ControlId::Keyboard(KeyCode::Space), Binding::Act(Action::Transport(TransportCmd::Toggle)));
+    m.insert(
+        ControlId::Keyboard(KeyCode::Z),
+        Binding::Act(Action::OctaveShift(-1)),
+    );
+    m.insert(
+        ControlId::Keyboard(KeyCode::X),
+        Binding::Act(Action::OctaveShift(1)),
+    );
+    m.insert(
+        ControlId::Keyboard(KeyCode::C),
+        Binding::Act(Action::VelocityShift(-0.1)),
+    );
+    m.insert(
+        ControlId::Keyboard(KeyCode::V),
+        Binding::Act(Action::VelocityShift(0.1)),
+    );
+    m.insert(
+        ControlId::Keyboard(KeyCode::Space),
+        Binding::Act(Action::Transport(TransportCmd::Toggle)),
+    );
     m
 }
 
@@ -56,26 +108,17 @@ pub fn default_mapping() -> Mapping {
 /// `pump` (egui's UI thread in this app - there is no separate "input
 /// thread" here, only a separate real-time audio thread that this struct
 /// never touches directly).
+///
+/// This does *not* track which notes are sounding. `AudioEngine::
+/// active_notes()` is published to `Telemetry` from `render()` and read
+/// from there instead (`engine::telemetry::Telemetry::active_notes`) - that
+/// reflects what the audio thread is actually still ringing (including a
+/// voice's release tail and any voice-stealing), which a count kept here
+/// from `NoteOn`/`NoteOff` alone could not.
 #[derive(Default)]
 pub struct KeyboardSource {
     pub held: HeldSet,
     pub play: PlayState,
-
-    /// How many currently-sounding keyboard notes fall in each pitch class,
-    /// indexed 0..12. This is what the performance view's note blocks read.
-    ///
-    /// It is *not* `AudioEngine::active_notes()` - that bitmask lives inside
-    /// the audio callback closure (see `engine::host::AudioHost::start`), and
-    /// there is no path from there to this struct without adding a field to
-    /// `Telemetry` and touching `src/audio/engine.rs`, both out of bounds for
-    /// this task. This is therefore "what the keyboard has told the engine to
-    /// play" rather than "what the engine is still sounding": it goes dark the
-    /// instant a `NoteOff` is sent, not when that voice's release tail
-    /// actually finishes, and it knows nothing of voice stealing. Counted
-    /// rather than a plain bitmask because two different keys - e.g. `A` and
-    /// `K`, an octave apart - can share a pitch class, and releasing one must
-    /// not blank a class the other key is still holding.
-    sounding_counts: [u8; 12],
 }
 
 impl KeyboardSource {
@@ -91,31 +134,8 @@ impl KeyboardSource {
             // Clamped: an octave beyond hearing and a velocity of zero both
             // present as "the keyboard stopped working".
             Action::OctaveShift(d) => self.play.octave = (self.play.octave + d).clamp(-1, 8),
-            Action::VelocityShift(d) => self.play.velocity = (self.play.velocity + d).clamp(0.1, 1.0),
-            _ => {}
-        }
-    }
-
-    /// Pitch classes the keyboard currently believes are sounding, one bit
-    /// per semitone - see the `sounding_counts` field doc for exactly what
-    /// this does and does not reflect.
-    pub fn active_notes(&self) -> u16 {
-        self.sounding_counts
-            .iter()
-            .enumerate()
-            .filter(|&(_, &count)| count > 0)
-            .fold(0u16, |mask, (i, _)| mask | (1 << i))
-    }
-
-    fn track_note(&mut self, action: &Action) {
-        match *action {
-            Action::NoteOn { note, .. } => {
-                self.sounding_counts[(note % 12) as usize] =
-                    self.sounding_counts[(note % 12) as usize].saturating_add(1);
-            }
-            Action::NoteOff { note } => {
-                self.sounding_counts[(note % 12) as usize] =
-                    self.sounding_counts[(note % 12) as usize].saturating_sub(1);
+            Action::VelocityShift(d) => {
+                self.play.velocity = (self.play.velocity + d).clamp(0.1, 1.0)
             }
             _ => {}
         }
@@ -142,7 +162,6 @@ impl KeyboardSource {
             host_time_ns: 0,
         };
         for action in resolve(mapping, &mut self.held, &self.play, &event) {
-            self.track_note(&action);
             if Self::goes_to_audio(&action) {
                 telemetry.push_command(AudioCommand::Act(action));
             } else {
@@ -157,7 +176,12 @@ impl KeyboardSource {
             i.events
                 .iter()
                 .filter_map(|e| match e {
-                    egui::Event::Key { key, pressed, repeat, .. } => Some((*key, *pressed, *repeat)),
+                    egui::Event::Key {
+                        key,
+                        pressed,
+                        repeat,
+                        ..
+                    } => Some((*key, *pressed, *repeat)),
                     _ => None,
                 })
                 .collect()
@@ -178,26 +202,49 @@ impl KeyboardSource {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::event::{Action, ControlId, ControlValue, ControlEvent, KeyCode};
+    use crate::core::event::{Action, ControlEvent, ControlId, ControlValue, KeyCode};
     use crate::input::mapping::{resolve, HeldSet, PlayState};
 
     fn press(key: KeyCode) -> ControlEvent {
-        ControlEvent { id: ControlId::Keyboard(key), value: ControlValue::Gate(true), host_time_ns: 0 }
+        ControlEvent {
+            id: ControlId::Keyboard(key),
+            value: ControlValue::Gate(true),
+            host_time_ns: 0,
+        }
     }
 
     #[test]
     fn the_home_row_plays_a_chromatic_scale_from_c() {
         let m = default_mapping();
-        let play = PlayState { octave: 4, velocity: 1.0 };
+        let play = PlayState {
+            octave: 4,
+            velocity: 1.0,
+        };
         let expected = [
-            (KeyCode::A, 60), (KeyCode::W, 61), (KeyCode::S, 62), (KeyCode::E, 63),
-            (KeyCode::D, 64), (KeyCode::F, 65), (KeyCode::T, 66), (KeyCode::G, 67),
-            (KeyCode::Y, 68), (KeyCode::H, 69), (KeyCode::U, 70), (KeyCode::J, 71),
+            (KeyCode::A, 60),
+            (KeyCode::W, 61),
+            (KeyCode::S, 62),
+            (KeyCode::E, 63),
+            (KeyCode::D, 64),
+            (KeyCode::F, 65),
+            (KeyCode::T, 66),
+            (KeyCode::G, 67),
+            (KeyCode::Y, 68),
+            (KeyCode::H, 69),
+            (KeyCode::U, 70),
+            (KeyCode::J, 71),
             (KeyCode::K, 72),
         ];
         for (key, note) in expected {
             let out = resolve(&m, &mut HeldSet::default(), &play, &press(key));
-            assert_eq!(out, vec![Action::NoteOn { note, velocity: 1.0 }], "{key:?} played the wrong note");
+            assert_eq!(
+                out,
+                vec![Action::NoteOn {
+                    note,
+                    velocity: 1.0
+                }],
+                "{key:?} played the wrong note"
+            );
         }
     }
 
@@ -206,13 +253,20 @@ mod tests {
         // W, E, T, Y, U are the sharps. If this drifts, the layout stops being
         // learnable by anyone who has seen a keyboard.
         let m = default_mapping();
-        let play = PlayState { octave: 4, velocity: 1.0 };
+        let play = PlayState {
+            octave: 4,
+            velocity: 1.0,
+        };
         for key in [KeyCode::W, KeyCode::E, KeyCode::T, KeyCode::Y, KeyCode::U] {
             let out = resolve(&m, &mut HeldSet::default(), &play, &press(key));
-            let Action::NoteOn { note, .. } = out[0] else { panic!("expected a note") };
+            let Action::NoteOn { note, .. } = out[0] else {
+                panic!("expected a note")
+            };
             let pitch_class = note % 12;
-            assert!([1, 3, 6, 8, 10].contains(&pitch_class),
-                    "{key:?} produced pitch class {pitch_class}, which is a white key");
+            assert!(
+                [1, 3, 6, 8, 10].contains(&pitch_class),
+                "{key:?} produced pitch class {pitch_class}, which is a white key"
+            );
         }
     }
 
@@ -221,7 +275,10 @@ mod tests {
         let m = default_mapping();
         let play = PlayState::default();
         let space = resolve(&m, &mut HeldSet::default(), &play, &press(KeyCode::Space));
-        assert_eq!(space, vec![Action::Transport(crate::core::event::TransportCmd::Toggle)]);
+        assert_eq!(
+            space,
+            vec![Action::Transport(crate::core::event::TransportCmd::Toggle)]
+        );
         let down = resolve(&m, &mut HeldSet::default(), &play, &press(KeyCode::Z));
         assert_eq!(down, vec![Action::OctaveShift(-1)]);
         let up = resolve(&m, &mut HeldSet::default(), &play, &press(KeyCode::X));
@@ -241,19 +298,31 @@ mod tests {
     #[test]
     fn octave_changes_are_clamped_to_a_playable_range() {
         let mut s = KeyboardSource::default();
-        for _ in 0..50 { s.apply_local(Action::OctaveShift(1)); }
+        for _ in 0..50 {
+            s.apply_local(Action::OctaveShift(1));
+        }
         assert!(s.play.octave <= 8, "octave ran away to {}", s.play.octave);
-        for _ in 0..50 { s.apply_local(Action::OctaveShift(-1)); }
+        for _ in 0..50 {
+            s.apply_local(Action::OctaveShift(-1));
+        }
         assert!(s.play.octave >= -1, "octave ran away to {}", s.play.octave);
     }
 
     #[test]
     fn velocity_changes_stay_within_the_usable_range() {
         let mut s = KeyboardSource::default();
-        for _ in 0..50 { s.apply_local(Action::VelocityShift(0.1)); }
+        for _ in 0..50 {
+            s.apply_local(Action::VelocityShift(0.1));
+        }
         assert!(s.play.velocity <= 1.0);
-        for _ in 0..50 { s.apply_local(Action::VelocityShift(-0.1)); }
-        assert!(s.play.velocity >= 0.1, "velocity reached {} - silent keys look broken", s.play.velocity);
+        for _ in 0..50 {
+            s.apply_local(Action::VelocityShift(-0.1));
+        }
+        assert!(
+            s.play.velocity >= 0.1,
+            "velocity reached {} - silent keys look broken",
+            s.play.velocity
+        );
     }
 
     #[test]
@@ -262,9 +331,14 @@ mod tests {
         // engine would be a command it must ignore, and a reader would wonder why.
         assert!(!KeyboardSource::goes_to_audio(&Action::OctaveShift(1)));
         assert!(!KeyboardSource::goes_to_audio(&Action::VelocityShift(0.1)));
-        assert!(KeyboardSource::goes_to_audio(&Action::NoteOn { note: 60, velocity: 1.0 }));
+        assert!(KeyboardSource::goes_to_audio(&Action::NoteOn {
+            note: 60,
+            velocity: 1.0
+        }));
         assert!(KeyboardSource::goes_to_audio(&Action::SetMacro {
-            macro_id: crate::core::ids::MacroId(0), value: 0.5 }));
+            macro_id: crate::core::ids::MacroId(0),
+            value: 0.5
+        }));
     }
 
     // --- KeyboardSource::pump / HeldSet wiring -----------------------------
@@ -286,7 +360,12 @@ mod tests {
         // `InputState::begin_pass` recomputes it from whether the key is
         // already tracked as down, overwriting whatever an integration (or a
         // test) supplies. Setting it truthfully is therefore not this test's
-        // job to get right.
+        // job to get right - and it's exactly what makes
+        // `holding_a_key_down_does_not_retrigger_it_on_the_operating_systems_key_repeat`
+        // below possible: `begin_pass` marks a second `pressed: true` for a
+        // key that is still tracked as down as `repeat: true`, whatever this
+        // helper passes in, which models real OS auto-repeat without a real
+        // window.
         egui::Event::Key {
             key,
             physical_key: None,
@@ -307,7 +386,10 @@ mod tests {
         telemetry: &Telemetry,
         events: Vec<egui::Event>,
     ) {
-        let raw = egui::RawInput { events, ..Default::default() };
+        let raw = egui::RawInput {
+            events,
+            ..Default::default()
+        };
         let _ = ctx.run(raw, |ctx| source.pump(ctx, mapping, telemetry));
     }
 
@@ -319,16 +401,31 @@ mod tests {
         let ctx = egui::Context::default();
 
         // Press A: starts middle C (octave 4, the default) and forwards it.
-        run_frame(&ctx, &mut source, &m, &telemetry, vec![key_event(egui::Key::A, true)]);
+        run_frame(
+            &ctx,
+            &mut source,
+            &m,
+            &telemetry,
+            vec![key_event(egui::Key::A, true)],
+        );
         assert_eq!(
             telemetry.commands.pop(),
-            Some(AudioCommand::Act(Action::NoteOn { note: 60, velocity: source.play.velocity })),
+            Some(AudioCommand::Act(Action::NoteOn {
+                note: 60,
+                velocity: source.play.velocity
+            })),
             "A should have started note 60"
         );
 
         // Press X while A is still held: shifts the octave. This must be
         // handled locally, not forwarded, and A's note must keep sounding.
-        run_frame(&ctx, &mut source, &m, &telemetry, vec![key_event(egui::Key::X, true)]);
+        run_frame(
+            &ctx,
+            &mut source,
+            &m,
+            &telemetry,
+            vec![key_event(egui::Key::X, true)],
+        );
         assert_eq!(source.play.octave, 5, "X should have shifted the octave up");
         assert!(
             telemetry.commands.pop().is_none(),
@@ -340,7 +437,13 @@ mod tests {
         // which was never turned on. A `pump` that passed a fresh `HeldSet`
         // instead of `&mut self.held` would strand note 60 forever and send
         // this wrong note-off instead.
-        run_frame(&ctx, &mut source, &m, &telemetry, vec![key_event(egui::Key::A, false)]);
+        run_frame(
+            &ctx,
+            &mut source,
+            &m,
+            &telemetry,
+            vec![key_event(egui::Key::A, false)],
+        );
         assert_eq!(
             telemetry.commands.pop(),
             Some(AudioCommand::Act(Action::NoteOff { note: 60 })),
@@ -348,36 +451,47 @@ mod tests {
         );
     }
 
-    // --- active_notes --------------------------------------------------
-
     #[test]
-    fn active_notes_lights_up_a_played_pitch_class_and_clears_on_release() {
+    fn holding_a_key_down_does_not_retrigger_it_on_the_operating_systems_key_repeat() {
+        // Two `pressed: true` events for the same key with no release between
+        // them, across two separate frames on one `egui::Context`, is exactly
+        // what a real window delivers while a key is held: `begin_pass` sees
+        // the key is still in its own `keys_down` set from the first frame
+        // and marks the second `repeat: true` on its own (see `key_event`).
+        // The guard in `pump` must swallow that second press - a retriggered
+        // note would restart the envelope's attack while the key is still
+        // physically down, which is the stutter this exists to prevent.
         let m = default_mapping();
         let telemetry = Telemetry::new(8);
-        let mut s = KeyboardSource::default();
+        let mut source = KeyboardSource::default();
+        let ctx = egui::Context::default();
 
-        s.on_key(KeyCode::A, true, &m, &telemetry); // C
-        assert_ne!(s.active_notes() & 1, 0, "C should be lit while A is held");
+        run_frame(
+            &ctx,
+            &mut source,
+            &m,
+            &telemetry,
+            vec![key_event(egui::Key::A, true)],
+        );
+        assert_eq!(
+            telemetry.commands.pop(),
+            Some(AudioCommand::Act(Action::NoteOn {
+                note: 60,
+                velocity: source.play.velocity
+            })),
+            "the genuine first press should have started note 60"
+        );
 
-        s.on_key(KeyCode::A, false, &m, &telemetry);
-        assert_eq!(s.active_notes(), 0, "C should go dark once A is released");
-    }
-
-    #[test]
-    fn active_notes_stays_lit_while_another_key_of_the_same_pitch_class_is_still_held() {
-        // A (semitone 0) and K (semitone 12) are both C, an octave apart.
-        // Releasing one must not blank a pitch class the other is still
-        // holding.
-        let m = default_mapping();
-        let telemetry = Telemetry::new(8);
-        let mut s = KeyboardSource::default();
-
-        s.on_key(KeyCode::A, true, &m, &telemetry);
-        s.on_key(KeyCode::K, true, &m, &telemetry);
-        s.on_key(KeyCode::A, false, &m, &telemetry);
-        assert_ne!(s.active_notes() & 1, 0, "C should still be lit - K is still down");
-
-        s.on_key(KeyCode::K, false, &m, &telemetry);
-        assert_eq!(s.active_notes(), 0);
+        run_frame(
+            &ctx,
+            &mut source,
+            &m,
+            &telemetry,
+            vec![key_event(egui::Key::A, true)],
+        );
+        assert!(
+            telemetry.commands.pop().is_none(),
+            "an OS key-repeat must not produce a second NoteOn"
+        );
     }
 }

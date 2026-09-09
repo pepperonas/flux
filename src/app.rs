@@ -69,11 +69,15 @@ impl eframe::App for FluxApp {
         egui::CentralPanel::default().show(ctx, |ui| match self.view {
             View::Performance => ui::performance::show(
                 ui,
-                self.keyboard.active_notes(),
+                self.audio
+                    .as_ref()
+                    .map_or(0, |h| h.telemetry.active_notes()),
                 self.keyboard.play.octave,
                 self.keyboard.play.velocity,
                 self.audio.as_ref().map_or(0.0, |h| h.telemetry.peak()),
-                self.audio.as_ref().map_or(0, |h| h.telemetry.active_voices()),
+                self.audio
+                    .as_ref()
+                    .map_or(0, |h| h.telemetry.active_voices()),
             ),
             View::Debug => ui::debug::show(
                 ui,

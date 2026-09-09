@@ -1,5 +1,5 @@
 use crossbeam_queue::ArrayQueue;
-use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicU16, AtomicU32, AtomicU64, Ordering};
 use std::sync::Arc;
 
 pub use crate::engine::command::{AudioCommand, EngineEvent};
@@ -12,6 +12,7 @@ pub struct Telemetry {
     pub events: ArrayQueue<EngineEvent>,
     peak_milli: AtomicU32,
     active_voices: AtomicU32,
+    active_notes: AtomicU16,
     dsp_load_permille: AtomicU32,
     dropped_commands: AtomicU64,
     dropped_events: AtomicU64,
@@ -25,6 +26,7 @@ impl Telemetry {
             events: ArrayQueue::new(capacity),
             peak_milli: AtomicU32::new(0),
             active_voices: AtomicU32::new(0),
+            active_notes: AtomicU16::new(0),
             dsp_load_permille: AtomicU32::new(0),
             dropped_commands: AtomicU64::new(0),
             dropped_events: AtomicU64::new(0),
@@ -64,6 +66,18 @@ impl Telemetry {
     }
     pub fn active_voices(&self) -> u32 {
         self.active_voices.load(Ordering::Relaxed)
+    }
+
+    /// Pitch classes actually sounding on the audio thread, one bit per
+    /// semitone - see `audio::voice::VoicePool::active_pitch_classes`. This
+    /// is what the performance view's note blocks read: it holds through a
+    /// voice's release tail exactly as `active_voices` does, so the two
+    /// numbers on screen never contradict each other.
+    pub fn set_active_notes(&self, mask: u16) {
+        self.active_notes.store(mask, Ordering::Relaxed);
+    }
+    pub fn active_notes(&self) -> u16 {
+        self.active_notes.load(Ordering::Relaxed)
     }
 
     pub fn set_dsp_load(&self, permille: u32) {
@@ -118,6 +132,14 @@ mod tests {
         let t = Telemetry::new(4);
         t.set_peak(0.625);
         assert!((t.peak() - 0.625).abs() < 1e-3);
+    }
+
+    #[test]
+    fn active_notes_survive_the_trip_through_an_atomic() {
+        let t = Telemetry::new(4);
+        let mask: u16 = (1 << 0) | (1 << 7); // C and G
+        t.set_active_notes(mask);
+        assert_eq!(t.active_notes(), mask);
     }
 
     #[test]

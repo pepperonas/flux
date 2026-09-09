@@ -252,6 +252,8 @@ impl AudioEngine {
 
         self.telemetry
             .set_active_voices(self.voices.active_count() as u32);
+        self.telemetry
+            .set_active_notes(self.voices.active_pitch_classes());
     }
 
     pub fn output(&self) -> &[f32] {
@@ -367,6 +369,30 @@ mod tests {
         assert_ne!(mask & (1 << 0), 0, "C is not reported");
         assert_ne!(mask & (1 << 7), 0, "G is not reported");
         assert_eq!(mask & (1 << 1), 0, "C sharp should not be reported");
+    }
+
+    #[test]
+    fn active_notes_are_published_to_telemetry() {
+        // `active_notes()` above is only reachable from inside the audio
+        // callback closure that owns this engine - the UI thread reads this
+        // exclusively through `Telemetry`, published from `render()` right
+        // next to `set_active_voices`. Pinned separately from the test above:
+        // a bug in one path (e.g. `render` never calling `set_active_notes`,
+        // or publishing a stale/empty mask) says nothing about the other, and
+        // this is the one the performance view's note blocks actually read.
+        let mut e = engine();
+        e.telemetry.push_command(AudioCommand::Act(Action::NoteOn {
+            note: 60,
+            velocity: 1.0,
+        }));
+        e.telemetry.push_command(AudioCommand::Act(Action::NoteOn {
+            note: 67,
+            velocity: 1.0,
+        }));
+        e.render(64);
+        let mask = e.telemetry.active_notes();
+        assert_ne!(mask & (1 << 0), 0, "C is not published to telemetry");
+        assert_ne!(mask & (1 << 7), 0, "G is not published to telemetry");
     }
 
     #[test]
