@@ -326,6 +326,65 @@ mod tests {
     }
 
     #[test]
+    fn the_pool_steals_the_truly_oldest_voice_even_when_that_is_not_slot_zero() {
+        // `the_pool_steals_the_oldest_voice_when_full` above fills every slot
+        // exactly once, in order, so array position and age agree by
+        // construction: slot 0 is both "first in the array" and "oldest by
+        // age". A stand-in for stealing that just grabs `voices[0]` -
+        // ignoring `age` entirely - passes that test for the wrong reason.
+        // Confirmed: swapping `min_by_key(|v| v.age)` for
+        // `.iter_mut().next()` leaves every one of the 129 tests in this
+        // crate green.
+        //
+        // This test breaks that coincidence on purpose. Slot 0's original
+        // voice is released and retriggered with a brand-new note, so slot 0
+        // ends up holding the NEWEST age in the pool while the genuinely
+        // oldest survivor sits in slot 1. Any implementation that steals by
+        // array position rather than by age must now steal the wrong voice.
+        let mut pool = VoicePool::default();
+        for i in 0..VOICE_COUNT {
+            pool.note_on(40 + i as u8, 1.0, SR);
+        }
+        // Slot 0 holds note 40 (age 1). No block has been rendered yet, so
+        // every envelope is still sitting at level 0.0 in its initial Attack
+        // stage - releasing from level 0.0 crosses the idle threshold on the
+        // very first tick of the next render, so one block is enough to
+        // free the slot.
+        pool.note_off(40);
+        let mut buf = vec![0.0f32; 512];
+        pool.render(&mut buf, &params(), SR);
+        assert!(
+            pool.voices.iter().all(|v| v.note != Some(40)),
+            "slot 0 never freed"
+        );
+
+        // Reuse the freed slot. It is the only free one, so the new note
+        // lands back in slot 0 - but with the newest age in the pool. The
+        // true oldest survivor (note 41, age 2) is now in slot 1.
+        pool.note_on(200, 1.0, SR);
+        assert_eq!(pool.active_count(), VOICE_COUNT);
+
+        // One more note forces a steal. The correct victim is the genuinely
+        // oldest survivor, note 41 - not slot 0's occupant (note 200, the
+        // newest age in the pool).
+        pool.note_on(201, 1.0, SR);
+        assert_eq!(
+            pool.active_count(),
+            VOICE_COUNT,
+            "the pool grew past its limit"
+        );
+        assert!(
+            !pool.voices.iter().any(|v| v.note == Some(41)),
+            "the genuinely oldest voice should have given way"
+        );
+        assert!(
+            pool.voices.iter().any(|v| v.note == Some(200)),
+            "the just-retriggered voice is the newest in the pool and must survive"
+        );
+        assert!(pool.voices.iter().any(|v| v.note == Some(201)));
+    }
+
+    #[test]
     fn note_off_for_a_note_that_is_not_sounding_is_harmless() {
         let mut pool = VoicePool::default();
         pool.note_off(60);
@@ -349,5 +408,69 @@ mod tests {
                 assert!(v.abs() < 4.0, "sixteen voices summed to {v}");
             }
         }
+    }
+
+    #[test]
+    fn loudness_scales_with_the_square_root_of_voice_count_not_a_constant() {
+        // `sixteen_simultaneous_voices_stay_in_range` above always holds
+        // exactly sixteen voices, so it only ever exercises `1.0 /
+        // 16.0.sqrt()` - a single point on the curve. Replacing the whole
+        // expression with the literal `0.25` (which equals `1.0 /
+        // 16.0.sqrt()`) leaves every one of the 129 tests in this crate
+        // green: nothing here checks that the scale factor actually moves
+        // as the voice count changes.
+        //
+        // This test checks the relationship instead of one point on it: the
+        // peak level of a chord of N freshly-started, identically-configured
+        // voices, measured a few samples into the same attack ramp they all
+        // share, relative to a single voice under the same conditions, must
+        // land near sqrt(N) - not near N (no compensation at all) and not
+        // flat at 1 (the pool ducking to a fixed level regardless of count).
+        //
+        // Measured within the first few samples deliberately: this is
+        // before the different oscillator frequencies have drifted far
+        // enough apart in phase to disturb the sum, and before the shared
+        // filter's own transient has had time to diverge per voice, so the
+        // *unscaled* sum of N voices is close to N times a single voice's
+        // level - which is exactly the assumption sqrt(N) compensation is
+        // supposed to correct for.
+        fn peak_after(notes: &[u8], frames: usize) -> f32 {
+            let mut pool = VoicePool::default();
+            for &n in notes {
+                pool.note_on(n, 1.0, SR);
+            }
+            let mut buf = vec![0.0f32; frames];
+            pool.render(&mut buf, &params(), SR);
+            buf.iter().fold(0.0f32, |a, b| a.max(b.abs()))
+        }
+
+        const FRAMES: usize = 8;
+        let one = peak_after(&[60], FRAMES);
+        let four = peak_after(&[60, 61, 62, 63], FRAMES);
+        let sixteen = peak_after(
+            &(0..VOICE_COUNT as u8).map(|i| 48 + i).collect::<Vec<_>>(),
+            FRAMES,
+        );
+        assert!(
+            one > 0.0,
+            "the single voice produced no signal to compare against"
+        );
+
+        let ratio_four = four / one;
+        let ratio_sixteen = sixteen / one;
+
+        // sqrt(4) = 2, sqrt(16) = 4. A fixed scale (e.g. the always-0.25
+        // mutation) applies the *same* divisor regardless of count, so the
+        // raw N-times growth of the sum would show through unchecked and
+        // these ratios would land near 4 and 16 instead - comfortably
+        // outside the tolerance below in either direction.
+        assert!(
+            (ratio_four - 2.0).abs() < 0.5,
+            "four voices were {ratio_four:.3}x one voice, expected close to sqrt(4) = 2.0"
+        );
+        assert!(
+            (ratio_sixteen - 4.0).abs() < 1.0,
+            "sixteen voices were {ratio_sixteen:.3}x one voice, expected close to sqrt(16) = 4.0"
+        );
     }
 }
