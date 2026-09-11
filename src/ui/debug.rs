@@ -1,6 +1,7 @@
 use crate::engine::host::{describe_buffer_frames, describe_latency_ms};
 use crate::engine::telemetry::{AudioCommand, Telemetry};
 use crate::input::midi::MidiSource;
+use crate::input::xplorer::XplorerSource;
 
 pub fn show(
     ui: &mut egui::Ui,
@@ -8,6 +9,7 @@ pub fn show(
     error: Option<&str>,
     test_tone: &mut bool,
     midi: &MidiSource,
+    xplorer: &XplorerSource,
 ) {
     ui.heading("DIAGNOSTICS");
     if let Some(err) = error {
@@ -56,6 +58,14 @@ pub fn show(
             ui.label(t.underruns().to_string());
             ui.end_row();
         });
+
+    ui.separator();
+    ui.label("Guitar Hero X-plorer");
+    ui.small(format!(
+        "{}; {} raw reports",
+        xplorer.status(),
+        xplorer.reports()
+    ));
 
     ui.separator();
     ui.label("MIDI inputs");

@@ -5,6 +5,7 @@ use crate::engine::telemetry::Telemetry;
 use crate::input::keyboard::{self, KeyboardSource};
 use crate::input::mapping::Mapping;
 use crate::input::midi::MidiSource;
+use crate::input::xplorer::XplorerSource;
 use crate::ui::{self, View};
 
 /// How many engine events one interface frame may take off the queue.
@@ -49,6 +50,7 @@ pub struct FluxApp {
     keyboard: KeyboardSource,
     mapping: Mapping,
     midi: MidiSource,
+    xplorer: XplorerSource,
 }
 
 impl FluxApp {
@@ -74,6 +76,7 @@ impl FluxApp {
             keyboard: KeyboardSource::default(),
             mapping: keyboard::default_mapping(),
             midi,
+            xplorer: XplorerSource::start(),
         }
     }
 }
@@ -148,6 +151,7 @@ impl eframe::App for FluxApp {
                 self.audio_error.as_deref(),
                 &mut self.test_tone,
                 &self.midi,
+                &self.xplorer,
             ),
         });
     }
@@ -212,6 +216,7 @@ mod tests {
             keyboard: KeyboardSource::default(),
             mapping: keyboard::default_mapping(),
             midi: MidiSource::default(),
+            xplorer: XplorerSource::start(),
         };
         let ctx = egui::Context::default();
         let raw = egui::RawInput {
