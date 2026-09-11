@@ -327,6 +327,7 @@ impl AudioEngine {
         self.telemetry
             .set_active_notes(self.voices.active_pitch_classes());
         self.transport.advance(frames as u64);
+        self.transport.loop_len = self.looper.loop_len;
         self.telemetry.set_transport(
             self.transport.sample_pos,
             self.transport.bpm,

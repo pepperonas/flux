@@ -66,22 +66,55 @@ pub fn show(
         ));
     });
 
-    ui.add_space(8.0);
-    ui.label("LOOP TRACKS");
-    for i in 0..4 {
-        let code = (track_states >> (i * 2)) & 0b11;
-        let label = match code {
-            0 => "EMPTY",
-            1 => "REC",
-            2 => "PLAY",
-            _ => "MUTE",
-        };
-        let marker = if i == active_track { "  ◀" } else { "" };
-        ui.label(format!("{}  {}{}", i + 1, label, marker));
-    }
-    if loop_len > 0 {
-        ui.label(format!("LOOP {} / {} samples", loop_pos, loop_len));
-    }
+    ui.add_space(18.0);
+    ui.horizontal(|ui| {
+        ui.heading("LOOP LANES");
+        if loop_len > 0 {
+            ui.add_space(12.0);
+            ui.small(format!("{} / {} samples", loop_pos, loop_len));
+        }
+    });
+    ui.horizontal(|ui| {
+        for i in 0..4 {
+            let code = (track_states >> (i * 2)) & 0b11;
+            let (label, colour) = match code {
+                0 => ("EMPTY", theme::TEXT_DIM),
+                1 => ("REC", theme::DANGER),
+                2 => ("PLAY", theme::ACCENT),
+                _ => ("MUTE", theme::ACCENT_WARM),
+            };
+            let active = i == active_track;
+            egui::Frame::group(ui.style())
+                .fill(if active {
+                    theme::SURFACE_HI
+                } else {
+                    theme::SURFACE
+                })
+                .stroke(egui::Stroke::new(
+                    1.0_f32,
+                    if active { colour } else { theme::SURFACE_HI },
+                ))
+                .rounding(egui::Rounding::same(8.0))
+                .inner_margin(egui::Margin::symmetric(12.0, 8.0))
+                .show(ui, |ui| {
+                    ui.vertical(|ui| {
+                        ui.small(format!("TRACK {}", i + 1));
+                        ui.colored_label(colour, label);
+                    });
+                });
+        }
+    });
+    let progress = if loop_len == 0 {
+        0.0
+    } else {
+        loop_pos as f32 / loop_len as f32
+    };
+    ui.add(
+        egui::ProgressBar::new(progress.clamp(0.0, 1.0))
+            .desired_height(6.0)
+            .fill(theme::ACCENT)
+            .text(""),
+    );
 
     ui.add_space(8.0);
     let (rect, _) = ui.allocate_exact_size(egui::vec2(240.0, 8.0), egui::Sense::hover());
