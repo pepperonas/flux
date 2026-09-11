@@ -48,7 +48,7 @@ pub struct FluxApp {
     test_tone: bool,
     keyboard: KeyboardSource,
     mapping: Mapping,
-    _midi: MidiSource,
+    midi: MidiSource,
 }
 
 impl FluxApp {
@@ -73,7 +73,7 @@ impl FluxApp {
             test_tone: false,
             keyboard: KeyboardSource::default(),
             mapping: keyboard::default_mapping(),
-            _midi: midi,
+            midi,
         }
     }
 }
@@ -147,6 +147,7 @@ impl eframe::App for FluxApp {
                 self.audio.as_ref(),
                 self.audio_error.as_deref(),
                 &mut self.test_tone,
+                &self.midi,
             ),
         });
     }
@@ -210,7 +211,7 @@ mod tests {
             test_tone: false,
             keyboard: KeyboardSource::default(),
             mapping: keyboard::default_mapping(),
-            _midi: MidiSource::default(),
+            midi: MidiSource::default(),
         };
         let ctx = egui::Context::default();
         let raw = egui::RawInput {

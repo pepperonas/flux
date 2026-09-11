@@ -1,11 +1,13 @@
 use crate::engine::host::{describe_buffer_frames, describe_latency_ms};
 use crate::engine::telemetry::{AudioCommand, Telemetry};
+use crate::input::midi::MidiSource;
 
 pub fn show(
     ui: &mut egui::Ui,
     host: Option<&crate::engine::host::AudioHost>,
     error: Option<&str>,
     test_tone: &mut bool,
+    midi: &MidiSource,
 ) {
     ui.heading("DIAGNOSTICS");
     if let Some(err) = error {
@@ -54,6 +56,16 @@ pub fn show(
             ui.label(t.underruns().to_string());
             ui.end_row();
         });
+
+    ui.separator();
+    ui.label("MIDI inputs");
+    if midi.ports.is_empty() {
+        ui.small("None connected at application start.");
+    } else {
+        for port in &midi.ports {
+            ui.small(port);
+        }
+    }
 
     ui.separator();
     if ui.checkbox(test_tone, "Test tone (440 Hz)").changed() {
