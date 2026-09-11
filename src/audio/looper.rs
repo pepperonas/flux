@@ -97,8 +97,8 @@ impl EventLooper {
                     TrackState::Recording => {
                         track.state = TrackState::Playing;
                         if self.loop_len == 0 {
-                            self.loop_len =
-                                ((pos.max(1) as f64 / 96_000.0).ceil() as u64).max(1) * 96_000;
+                            let bar = samples_per_bar.max(1.0).round() as u64;
+                            self.loop_len = pos.max(1).div_ceil(bar).max(1) * bar;
                         }
                         self.recording_start = None;
                         if let Some(grid) = self.grid.samples(samples_per_beat) {
@@ -289,5 +289,15 @@ mod tests {
                 velocity: 1.0
             })
         );
+    }
+
+    #[test]
+    fn loop_length_uses_the_transport_bar_length() {
+        let mut l = EventLooper::default();
+        // 44.1 kHz at 100 BPM: four beats are 105_840 samples.
+        let bar = 105_840.0;
+        l.handle(LoopCmd::ToggleRecord, 0, 26_460.0, bar);
+        l.handle(LoopCmd::ToggleRecord, 110_000, 26_460.0, bar);
+        assert_eq!(l.loop_len, bar as u64 * 2);
     }
 }

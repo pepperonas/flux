@@ -106,6 +106,18 @@ pub fn default_mapping() -> Mapping {
         ControlId::Keyboard(KeyCode::R),
         Binding::Act(Action::LoopControl(LoopCmd::ToggleRecord)),
     );
+    m.insert(
+        ControlId::Keyboard(KeyCode::Comma),
+        Binding::Act(Action::LoopControl(LoopCmd::Clear)),
+    );
+    m.insert(
+        ControlId::Keyboard(KeyCode::Period),
+        Binding::Act(Action::LoopControl(LoopCmd::Undo)),
+    );
+    m.insert(
+        ControlId::Keyboard(KeyCode::Minus),
+        Binding::Act(Action::LoopControl(LoopCmd::Mute)),
+    );
     for (key, track) in [
         (KeyCode::Num1, 0),
         (KeyCode::Num2, 1),
@@ -341,6 +353,23 @@ mod tests {
         assert_eq!(down, vec![Action::OctaveShift(-1)]);
         let up = resolve(&m, &mut HeldSet::default(), &play, &press(KeyCode::X));
         assert_eq!(up, vec![Action::OctaveShift(1)]);
+    }
+
+    #[test]
+    fn loop_controls_are_bound_to_visible_keyboard_keys() {
+        let m = default_mapping();
+        let play = PlayState::default();
+        for (key, cmd) in [
+            (KeyCode::R, LoopCmd::ToggleRecord),
+            (KeyCode::Comma, LoopCmd::Clear),
+            (KeyCode::Period, LoopCmd::Undo),
+            (KeyCode::Minus, LoopCmd::Mute),
+        ] {
+            assert_eq!(
+                resolve(&m, &mut HeldSet::default(), &play, &press(key)),
+                vec![Action::LoopControl(cmd)]
+            );
+        }
     }
 
     #[test]
