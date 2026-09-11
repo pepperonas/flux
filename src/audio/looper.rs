@@ -77,7 +77,7 @@ impl Default for EventLooper {
 }
 
 impl EventLooper {
-    pub fn handle(&mut self, cmd: LoopCmd, pos: u64) {
+    pub fn handle(&mut self, cmd: LoopCmd, pos: u64, samples_per_beat: f64) {
         match cmd {
             LoopCmd::ToggleRecord => {
                 let track = &mut self.tracks[self.active_track];
@@ -87,6 +87,13 @@ impl EventLooper {
                         if self.loop_len == 0 {
                             self.loop_len =
                                 ((pos.max(1) as f64 / 96_000.0).ceil() as u64).max(1) * 96_000;
+                        }
+                        if let Some(grid) = self.grid.samples(samples_per_beat) {
+                            for event in track.events[..track.len].iter_mut().flatten() {
+                                event.pos = quantize_in_loop(event.pos, grid, self.loop_len);
+                            }
+                            track.events[..track.len]
+                                .sort_by_key(|event| event.expect("occupied").pos);
                         }
                     }
                     TrackState::Empty | TrackState::Playing | TrackState::Muted => {
@@ -176,7 +183,7 @@ mod tests {
     #[test]
     fn recording_toggle_captures_and_replays_an_event() {
         let mut l = EventLooper::default();
-        l.handle(LoopCmd::ToggleRecord, 0);
+        l.handle(LoopCmd::ToggleRecord, 0, 24_000.0);
         l.record(
             Action::NoteOn {
                 note: 60,
@@ -185,11 +192,10 @@ mod tests {
             100,
             24_000.0,
         );
-        l.handle(LoopCmd::ToggleRecord, 100_000);
+        l.handle(LoopCmd::ToggleRecord, 100_000, 24_000.0);
         l.loop_len = 96_000;
-        assert_eq!(l.events_at(0)[0], None);
         assert_eq!(
-            l.events_at(100)[0],
+            l.events_at(0)[0],
             Some(Action::NoteOn {
                 note: 60,
                 velocity: 1.0
@@ -200,7 +206,7 @@ mod tests {
     #[test]
     fn undo_restores_the_event_count_before_the_overdub() {
         let mut l = EventLooper::default();
-        l.handle(LoopCmd::ToggleRecord, 0);
+        l.handle(LoopCmd::ToggleRecord, 0, 24_000.0);
         l.record(
             Action::NoteOn {
                 note: 60,
@@ -209,8 +215,8 @@ mod tests {
             100,
             24_000.0,
         );
-        l.handle(LoopCmd::ToggleRecord, 100_000);
-        l.handle(LoopCmd::ToggleRecord, 100_000);
+        l.handle(LoopCmd::ToggleRecord, 100_000, 24_000.0);
+        l.handle(LoopCmd::ToggleRecord, 100_000, 24_000.0);
         l.record(
             Action::NoteOn {
                 note: 64,
@@ -219,7 +225,7 @@ mod tests {
             200,
             24_000.0,
         );
-        l.handle(LoopCmd::Undo, 200);
+        l.handle(LoopCmd::Undo, 200, 24_000.0);
         l.loop_len = 96_000;
         assert_eq!(l.events_at(200)[0], None);
     }
@@ -227,7 +233,7 @@ mod tests {
     #[test]
     fn selecting_a_track_does_not_change_the_others() {
         let mut l = EventLooper::default();
-        l.handle(LoopCmd::Select(2), 0);
+        l.handle(LoopCmd::Select(2), 0, 24_000.0);
         assert_eq!(l.active_track, 2);
         assert_eq!(l.track_state(0), "EMPTY");
     }

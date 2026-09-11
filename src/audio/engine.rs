@@ -238,7 +238,11 @@ impl AudioEngine {
                         TransportCmd::Stop => self.transport.playing = false,
                         TransportCmd::Toggle => self.transport.playing = !self.transport.playing,
                     },
-                    Action::LoopControl(cmd) => self.looper.handle(cmd, self.transport.sample_pos),
+                    Action::LoopControl(cmd) => self.looper.handle(
+                        cmd,
+                        self.transport.sample_pos,
+                        self.transport.samples_per_beat(),
+                    ),
                     Action::OctaveShift(_) | Action::VelocityShift(_) => {}
                 },
             }
