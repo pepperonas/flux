@@ -242,6 +242,7 @@ impl AudioEngine {
                         cmd,
                         self.transport.sample_pos,
                         self.transport.samples_per_beat(),
+                        self.transport.samples_per_bar(),
                     ),
                     Action::OctaveShift(_) | Action::VelocityShift(_) => {}
                 },
