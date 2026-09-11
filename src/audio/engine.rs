@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use crate::audio::looper::EventLooper;
 use crate::audio::voice::{ParamValues, VoicePool};
 use crate::core::event::Action;
 use crate::core::event::TransportCmd;
@@ -26,6 +27,7 @@ pub struct AudioEngine {
     pub params: ModMatrix,
     registry: ParamRegistry,
     pub transport: Transport,
+    pub looper: EventLooper,
 
     voices: VoicePool,
     voice_bus: Vec<f32>,
@@ -179,6 +181,7 @@ impl AudioEngine {
                 sample_rate,
                 ..Transport::default()
             },
+            looper: EventLooper::default(),
             voices: VoicePool::default(),
             voice_bus: vec![0.0; max_block],
             schedule,
@@ -201,6 +204,11 @@ impl AudioEngine {
                 AudioCommand::SetTestTone(on) => self.test_tone = on,
                 AudioCommand::Act(action) => match action {
                     Action::NoteOn { note, velocity } => {
+                        self.looper.record(
+                            action,
+                            self.transport.sample_pos,
+                            self.transport.samples_per_beat(),
+                        );
                         if let Some(stolen) = self.voices.note_on(note, velocity, self.sample_rate)
                         {
                             self.telemetry
@@ -209,6 +217,11 @@ impl AudioEngine {
                         self.telemetry.push_event(EngineEvent::NoteStarted { note });
                     }
                     Action::NoteOff { note } => {
+                        self.looper.record(
+                            action,
+                            self.transport.sample_pos,
+                            self.transport.samples_per_beat(),
+                        );
                         self.voices.note_off(note);
                         self.telemetry.push_event(EngineEvent::NoteEnded { note });
                     }
@@ -225,6 +238,7 @@ impl AudioEngine {
                         TransportCmd::Stop => self.transport.playing = false,
                         TransportCmd::Toggle => self.transport.playing = !self.transport.playing,
                     },
+                    Action::LoopControl(cmd) => self.looper.handle(cmd, self.transport.sample_pos),
                     Action::OctaveShift(_) | Action::VelocityShift(_) => {}
                 },
             }
@@ -234,6 +248,22 @@ impl AudioEngine {
     pub fn render(&mut self, frames: usize) {
         let frames = frames.min(self.out.len());
         self.drain_commands();
+        if self.transport.playing && self.looper.loop_len > 0 {
+            for action in self
+                .looper
+                .events_at(self.transport.sample_pos)
+                .into_iter()
+                .flatten()
+            {
+                match action {
+                    Action::NoteOn { note, velocity } => {
+                        self.voices.note_on(note, velocity, self.sample_rate);
+                    }
+                    Action::NoteOff { note } => self.voices.note_off(note),
+                    _ => {}
+                }
+            }
+        }
         self.params.recompute();
 
         let mut values = ParamValues::default();

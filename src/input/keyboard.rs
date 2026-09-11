@@ -1,4 +1,6 @@
-use crate::core::event::{Action, ControlEvent, ControlId, ControlValue, KeyCode, TransportCmd};
+use crate::core::event::{
+    Action, ControlEvent, ControlId, ControlValue, KeyCode, LoopCmd, TransportCmd,
+};
 use crate::engine::telemetry::{AudioCommand, Telemetry};
 use crate::input::mapping::{resolve, Binding, HeldSet, Mapping, PlayState};
 
@@ -100,6 +102,21 @@ pub fn default_mapping() -> Mapping {
         ControlId::Keyboard(KeyCode::Space),
         Binding::Act(Action::Transport(TransportCmd::Toggle)),
     );
+    m.insert(
+        ControlId::Keyboard(KeyCode::R),
+        Binding::Act(Action::LoopControl(LoopCmd::ToggleRecord)),
+    );
+    for (key, track) in [
+        (KeyCode::Num1, 0),
+        (KeyCode::Num2, 1),
+        (KeyCode::Num3, 2),
+        (KeyCode::Num4, 3),
+    ] {
+        m.insert(
+            ControlId::Keyboard(key),
+            Binding::Act(Action::LoopControl(LoopCmd::Select(track))),
+        );
+    }
     m
 }
 

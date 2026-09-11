@@ -134,6 +134,15 @@ pub enum TransportCmd {
     Toggle,
 }
 
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum LoopCmd {
+    ToggleRecord,
+    Clear,
+    Undo,
+    Mute,
+    Select(u8),
+}
+
 /// What the musical engine is asked to do. Every variant is `Copy`, because
 /// these travel through an allocation-free queue into the audio thread.
 #[derive(Clone, Copy, PartialEq, Debug)]
@@ -143,6 +152,7 @@ pub enum Action {
     SetMacro { macro_id: MacroId, value: f32 },
     SetParam { target: ParamId, value: f32 },
     Transport(TransportCmd),
+    LoopControl(LoopCmd),
     OctaveShift(i8),
     VelocityShift(f32),
 }
