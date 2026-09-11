@@ -16,6 +16,10 @@ pub struct Telemetry {
     sample_pos: AtomicU64,
     bpm_milli: AtomicU32,
     playing: AtomicBool,
+    loop_pos: AtomicU64,
+    loop_len: AtomicU64,
+    track_states: AtomicU32,
+    active_track: AtomicU32,
     dsp_load_permille: AtomicU32,
     dropped_commands: AtomicU64,
     dropped_events: AtomicU64,
@@ -33,6 +37,10 @@ impl Telemetry {
             sample_pos: AtomicU64::new(0),
             bpm_milli: AtomicU32::new(120_000),
             playing: AtomicBool::new(true),
+            loop_pos: AtomicU64::new(0),
+            loop_len: AtomicU64::new(0),
+            track_states: AtomicU32::new(0),
+            active_track: AtomicU32::new(0),
             dsp_load_permille: AtomicU32::new(0),
             dropped_commands: AtomicU64::new(0),
             dropped_events: AtomicU64::new(0),
@@ -103,6 +111,25 @@ impl Telemetry {
 
     pub fn playing(&self) -> bool {
         self.playing.load(Ordering::Relaxed)
+    }
+
+    pub fn set_loop_state(&self, pos: u64, len: u64, states: u32, active: usize) {
+        self.loop_pos.store(pos, Ordering::Relaxed);
+        self.loop_len.store(len, Ordering::Relaxed);
+        self.track_states.store(states, Ordering::Relaxed);
+        self.active_track.store(active as u32, Ordering::Relaxed);
+    }
+    pub fn loop_pos(&self) -> u64 {
+        self.loop_pos.load(Ordering::Relaxed)
+    }
+    pub fn loop_len(&self) -> u64 {
+        self.loop_len.load(Ordering::Relaxed)
+    }
+    pub fn track_states(&self) -> u32 {
+        self.track_states.load(Ordering::Relaxed)
+    }
+    pub fn active_track(&self) -> usize {
+        self.active_track.load(Ordering::Relaxed) as usize
     }
 
     pub fn set_dsp_load(&self, permille: u32) {

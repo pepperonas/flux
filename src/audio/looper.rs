@@ -75,6 +75,18 @@ impl Default for EventLooper {
 }
 
 impl EventLooper {
+    pub fn state_codes(&self) -> u32 {
+        self.tracks.iter().enumerate().fold(0, |bits, (i, track)| {
+            let code = match track.state {
+                TrackState::Empty => 0,
+                TrackState::Recording => 1,
+                TrackState::Playing => 2,
+                TrackState::Muted => 3,
+            };
+            bits | (code << (i * 2))
+        })
+    }
+
     pub fn handle(&mut self, cmd: LoopCmd, pos: u64, samples_per_beat: f64) {
         match cmd {
             LoopCmd::ToggleRecord => {

@@ -332,6 +332,12 @@ impl AudioEngine {
             self.transport.bpm,
             self.transport.playing,
         );
+        self.telemetry.set_loop_state(
+            self.transport.pos_in_loop(),
+            self.looper.loop_len,
+            self.looper.state_codes(),
+            self.looper.active_track,
+        );
     }
 
     pub fn output(&self) -> &[f32] {

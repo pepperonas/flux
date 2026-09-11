@@ -23,6 +23,10 @@ pub fn show(
     voices: u32,
     bpm: f32,
     playing: bool,
+    loop_pos: u64,
+    loop_len: u64,
+    track_states: u32,
+    active_track: usize,
 ) {
     ui.heading("FLUX");
     ui.add_space(12.0);
@@ -61,6 +65,23 @@ pub fn show(
             bpm
         ));
     });
+
+    ui.add_space(8.0);
+    ui.label("LOOP TRACKS");
+    for i in 0..4 {
+        let code = (track_states >> (i * 2)) & 0b11;
+        let label = match code {
+            0 => "EMPTY",
+            1 => "REC",
+            2 => "PLAY",
+            _ => "MUTE",
+        };
+        let marker = if i == active_track { "  ◀" } else { "" };
+        ui.label(format!("{}  {}{}", i + 1, label, marker));
+    }
+    if loop_len > 0 {
+        ui.label(format!("LOOP {} / {} samples", loop_pos, loop_len));
+    }
 
     ui.add_space(8.0);
     let (rect, _) = ui.allocate_exact_size(egui::vec2(240.0, 8.0), egui::Sense::hover());

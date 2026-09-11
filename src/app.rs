@@ -144,6 +144,14 @@ impl eframe::App for FluxApp {
                     .map_or(0, |h| h.telemetry.active_voices()),
                 self.audio.as_ref().map_or(120.0, |h| h.telemetry.bpm()),
                 self.audio.as_ref().is_some_and(|h| h.telemetry.playing()),
+                self.audio.as_ref().map_or(0, |h| h.telemetry.loop_pos()),
+                self.audio.as_ref().map_or(0, |h| h.telemetry.loop_len()),
+                self.audio
+                    .as_ref()
+                    .map_or(0, |h| h.telemetry.track_states()),
+                self.audio
+                    .as_ref()
+                    .map_or(0, |h| h.telemetry.active_track()),
             ),
             View::Debug => ui::debug::show(
                 ui,
