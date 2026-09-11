@@ -61,7 +61,6 @@ pub struct EventLooper {
     pub active_track: usize,
     pub loop_len: u64,
     pub grid: Grid,
-    cursor: [usize; TRACK_COUNT],
 }
 
 impl Default for EventLooper {
@@ -71,7 +70,6 @@ impl Default for EventLooper {
             active_track: 0,
             loop_len: 0,
             grid: Grid::Sixteenth,
-            cursor: [0; TRACK_COUNT],
         }
     }
 }
@@ -141,25 +139,27 @@ impl EventLooper {
         track.insert(LoopEvent { pos: p, action });
     }
 
-    pub fn events_at(&mut self, pos: u64) -> [Option<Action>; TRACK_COUNT] {
-        let mut out = [None; TRACK_COUNT];
+    pub fn events_in_block(&self, pos: u64, frames: usize) -> [Option<Action>; 64] {
+        let mut out = [None; 64];
         if self.loop_len == 0 {
             return out;
         }
         let p = pos % self.loop_len;
-        for (i, track) in self.tracks.iter_mut().enumerate() {
+        let end = p.saturating_add(frames as u64);
+        let wrapped_end = end % self.loop_len;
+        let mut out_len = 0;
+        for track in &self.tracks {
             if matches!(track.state, TrackState::Playing) {
-                if p == 0 {
-                    self.cursor[i] = 0;
-                }
-                while self.cursor[i] < track.len
-                    && track.events[self.cursor[i]].expect("occupied").pos <= p
-                {
-                    let event = track.events[self.cursor[i]].expect("occupied");
-                    if event.pos == p {
-                        out[i] = Some(event.action);
+                for event in track.events[..track.len].iter().flatten() {
+                    let in_range = if end < self.loop_len {
+                        event.pos >= p && event.pos < end
+                    } else {
+                        event.pos >= p || event.pos < wrapped_end
+                    };
+                    if in_range && out_len < out.len() {
+                        out[out_len] = Some(event.action);
+                        out_len += 1;
                     }
-                    self.cursor[i] += 1;
                 }
             }
         }
@@ -195,7 +195,7 @@ mod tests {
         l.handle(LoopCmd::ToggleRecord, 100_000, 24_000.0);
         l.loop_len = 96_000;
         assert_eq!(
-            l.events_at(0)[0],
+            l.events_in_block(0, 256)[0],
             Some(Action::NoteOn {
                 note: 60,
                 velocity: 1.0
@@ -227,7 +227,7 @@ mod tests {
         );
         l.handle(LoopCmd::Undo, 200, 24_000.0);
         l.loop_len = 96_000;
-        assert_eq!(l.events_at(200)[0], None);
+        assert_eq!(l.events_in_block(200, 256)[0], None);
     }
 
     #[test]

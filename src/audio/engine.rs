@@ -255,7 +255,7 @@ impl AudioEngine {
         if self.transport.playing && self.looper.loop_len > 0 {
             for action in self
                 .looper
-                .events_at(self.transport.sample_pos)
+                .events_in_block(self.transport.sample_pos, frames)
                 .into_iter()
                 .flatten()
             {
