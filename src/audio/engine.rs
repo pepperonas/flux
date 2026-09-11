@@ -2,7 +2,9 @@ use std::sync::Arc;
 
 use crate::audio::voice::{ParamValues, VoicePool};
 use crate::core::event::Action;
+use crate::core::event::TransportCmd;
 use crate::core::ids::ParamId;
+use crate::core::transport::Transport;
 use crate::engine::telemetry::{AudioCommand, EngineEvent, Telemetry};
 use crate::graph::module::Module;
 use crate::graph::modules;
@@ -23,6 +25,7 @@ pub struct AudioEngine {
     pub telemetry: Arc<Telemetry>,
     pub params: ModMatrix,
     registry: ParamRegistry,
+    pub transport: Transport,
 
     voices: VoicePool,
     voice_bus: Vec<f32>,
@@ -172,6 +175,10 @@ impl AudioEngine {
             telemetry,
             params,
             registry,
+            transport: Transport {
+                sample_rate,
+                ..Transport::default()
+            },
             voices: VoicePool::default(),
             voice_bus: vec![0.0; max_block],
             schedule,
@@ -213,7 +220,12 @@ impl AudioEngine {
                     }
                     // Transport, octave and velocity are handled on the input
                     // thread; they never reach the audio thread in M1a.
-                    Action::Transport(_) | Action::OctaveShift(_) | Action::VelocityShift(_) => {}
+                    Action::Transport(cmd) => match cmd {
+                        TransportCmd::Play => self.transport.playing = true,
+                        TransportCmd::Stop => self.transport.playing = false,
+                        TransportCmd::Toggle => self.transport.playing = !self.transport.playing,
+                    },
+                    Action::OctaveShift(_) | Action::VelocityShift(_) => {}
                 },
             }
         }
@@ -280,6 +292,12 @@ impl AudioEngine {
             .set_active_voices(self.voices.active_count() as u32);
         self.telemetry
             .set_active_notes(self.voices.active_pitch_classes());
+        self.transport.advance(frames as u64);
+        self.telemetry.set_transport(
+            self.transport.sample_pos,
+            self.transport.bpm,
+            self.transport.playing,
+        );
     }
 
     pub fn output(&self) -> &[f32] {
@@ -318,6 +336,24 @@ mod tests {
         e.render(256);
         let peak = e.output()[..256].iter().fold(0.0f32, |a, b| a.max(b.abs()));
         assert!(peak > 0.001, "the engine stayed silent, peak {peak}");
+    }
+
+    #[test]
+    fn transport_toggle_stops_and_resumes_the_audio_clock() {
+        let mut e = engine();
+        e.render(256);
+        let first = e.transport.sample_pos;
+        e.telemetry
+            .push_command(AudioCommand::Act(Action::Transport(TransportCmd::Stop)));
+        e.render(256);
+        assert!(!e.transport.playing);
+        assert_eq!(e.transport.sample_pos, first);
+        e.telemetry
+            .push_command(AudioCommand::Act(Action::Transport(TransportCmd::Play)));
+        e.render(256);
+        assert!(e.transport.playing);
+        assert_eq!(e.transport.sample_pos, first + 256);
+        assert!(e.telemetry.playing());
     }
 
     #[test]

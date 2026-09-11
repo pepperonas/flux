@@ -13,7 +13,17 @@ const NOTE_NAMES: [&str; 12] = [
     "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B",
 ];
 
-pub fn show(ui: &mut egui::Ui, active: u16, octave: i8, velocity: f32, peak: f32, voices: u32) {
+#[allow(clippy::too_many_arguments)]
+pub fn show(
+    ui: &mut egui::Ui,
+    active: u16,
+    octave: i8,
+    velocity: f32,
+    peak: f32,
+    voices: u32,
+    bpm: f32,
+    playing: bool,
+) {
     ui.heading("FLUX");
     ui.add_space(12.0);
 
@@ -44,6 +54,12 @@ pub fn show(ui: &mut egui::Ui, active: u16, octave: i8, velocity: f32, peak: f32
         ui.label(format!("VELOCITY {:.0}%", velocity * 100.0));
         ui.separator();
         ui.label(format!("VOICES {voices}"));
+        ui.separator();
+        ui.label(format!(
+            "{} {:.1} BPM",
+            if playing { "PLAY" } else { "STOP" },
+            bpm
+        ));
     });
 
     ui.add_space(8.0);

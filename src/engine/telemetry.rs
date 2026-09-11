@@ -1,5 +1,5 @@
 use crossbeam_queue::ArrayQueue;
-use std::sync::atomic::{AtomicU16, AtomicU32, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU16, AtomicU32, AtomicU64, Ordering};
 use std::sync::Arc;
 
 pub use crate::engine::command::{AudioCommand, EngineEvent};
@@ -13,6 +13,9 @@ pub struct Telemetry {
     peak_milli: AtomicU32,
     active_voices: AtomicU32,
     active_notes: AtomicU16,
+    sample_pos: AtomicU64,
+    bpm_milli: AtomicU32,
+    playing: AtomicBool,
     dsp_load_permille: AtomicU32,
     dropped_commands: AtomicU64,
     dropped_events: AtomicU64,
@@ -27,6 +30,9 @@ impl Telemetry {
             peak_milli: AtomicU32::new(0),
             active_voices: AtomicU32::new(0),
             active_notes: AtomicU16::new(0),
+            sample_pos: AtomicU64::new(0),
+            bpm_milli: AtomicU32::new(120_000),
+            playing: AtomicBool::new(true),
             dsp_load_permille: AtomicU32::new(0),
             dropped_commands: AtomicU64::new(0),
             dropped_events: AtomicU64::new(0),
@@ -78,6 +84,25 @@ impl Telemetry {
     }
     pub fn active_notes(&self) -> u16 {
         self.active_notes.load(Ordering::Relaxed)
+    }
+
+    pub fn set_transport(&self, sample_pos: u64, bpm: f32, playing: bool) {
+        self.sample_pos.store(sample_pos, Ordering::Relaxed);
+        self.bpm_milli
+            .store((bpm.max(0.0) * 1000.0) as u32, Ordering::Relaxed);
+        self.playing.store(playing, Ordering::Relaxed);
+    }
+
+    pub fn sample_pos(&self) -> u64 {
+        self.sample_pos.load(Ordering::Relaxed)
+    }
+
+    pub fn bpm(&self) -> f32 {
+        self.bpm_milli.load(Ordering::Relaxed) as f32 / 1000.0
+    }
+
+    pub fn playing(&self) -> bool {
+        self.playing.load(Ordering::Relaxed)
     }
 
     pub fn set_dsp_load(&self, permille: u32) {
