@@ -118,7 +118,17 @@ impl EventLooper {
                     }
                 }
             }
-            LoopCmd::Clear => self.tracks[self.active_track].clear(),
+            LoopCmd::Clear => {
+                self.tracks[self.active_track].clear();
+                self.recording_start = None;
+                if self
+                    .tracks
+                    .iter()
+                    .all(|track| track.state == TrackState::Empty)
+                {
+                    self.loop_len = 0;
+                }
+            }
             LoopCmd::Undo => {
                 let track = &mut self.tracks[self.active_track];
                 track.len = track.before_record.min(track.len);
@@ -299,5 +309,16 @@ mod tests {
         l.handle(LoopCmd::ToggleRecord, 0, 26_460.0, bar);
         l.handle(LoopCmd::ToggleRecord, 110_000, 26_460.0, bar);
         assert_eq!(l.loop_len, bar as u64 * 2);
+    }
+
+    #[test]
+    fn clearing_the_last_track_resets_the_loop_clock() {
+        let mut l = EventLooper::default();
+        l.handle(LoopCmd::ToggleRecord, 0, 24_000.0, 96_000.0);
+        l.handle(LoopCmd::ToggleRecord, 96_000, 24_000.0, 96_000.0);
+        assert_eq!(l.loop_len, 96_000);
+        l.handle(LoopCmd::Clear, 96_000, 24_000.0, 96_000.0);
+        assert_eq!(l.loop_len, 0);
+        assert_eq!(l.track_state(0), "EMPTY");
     }
 }
