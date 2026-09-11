@@ -4,6 +4,7 @@ use crate::engine::host::AudioHost;
 use crate::engine::telemetry::Telemetry;
 use crate::input::keyboard::{self, KeyboardSource};
 use crate::input::mapping::Mapping;
+use crate::input::midi::MidiSource;
 use crate::ui::{self, View};
 
 /// How many engine events one interface frame may take off the queue.
@@ -47,6 +48,7 @@ pub struct FluxApp {
     test_tone: bool,
     keyboard: KeyboardSource,
     mapping: Mapping,
+    _midi: MidiSource,
 }
 
 impl FluxApp {
@@ -60,6 +62,10 @@ impl FluxApp {
                 (None, Some(err.to_string()))
             }
         };
+        let midi = audio
+            .as_ref()
+            .map(|host| MidiSource::connect_all(Arc::clone(&host.telemetry)))
+            .unwrap_or_default();
         FluxApp {
             view: View::default(),
             audio,
@@ -67,6 +73,7 @@ impl FluxApp {
             test_tone: false,
             keyboard: KeyboardSource::default(),
             mapping: keyboard::default_mapping(),
+            _midi: midi,
         }
     }
 }
@@ -203,6 +210,7 @@ mod tests {
             test_tone: false,
             keyboard: KeyboardSource::default(),
             mapping: keyboard::default_mapping(),
+            _midi: MidiSource::default(),
         };
         let ctx = egui::Context::default();
         let raw = egui::RawInput {
