@@ -77,6 +77,18 @@ pub fn show(
 
     ui.separator();
     ui.label("Guitar Hero X-plorer");
+    ui.colored_label(
+        if xplorer.status().starts_with("connected") {
+            crate::ui::theme::ACCENT
+        } else {
+            crate::ui::theme::DANGER
+        },
+        if xplorer.status().starts_with("connected") {
+            "● XPLORER connected"
+        } else {
+            "● XPLORER offline"
+        },
+    );
     ui.small(format!(
         "{}; {} raw reports",
         xplorer.status(),
@@ -94,6 +106,18 @@ pub fn show(
 
     ui.separator();
     ui.label("MIDI inputs");
+    ui.colored_label(
+        if midi.ports.is_empty() {
+            crate::ui::theme::DANGER
+        } else {
+            crate::ui::theme::ACCENT
+        },
+        if midi.ports.is_empty() {
+            "● MIDI offline"
+        } else {
+            "● MIDI connected"
+        },
+    );
     ui.small(format!("{} messages received", midi.messages()));
     if let Some(message) = midi.last_message() {
         ui.small(format!("last message bytes: {message:016x}"));

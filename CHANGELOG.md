@@ -9,6 +9,8 @@
 - MIDI note input, provisional encoder CC 21–28 macro mapping, and diagnostics.
 - Reconnect-safe raw Xplorer USB reader with report fingerprint, byte display,
   and report-difference learner.
+- Automatic MIDI port change detection and visible MIDI/Xplorer connection
+  indicators in Diagnostics.
 - Voice-steal velocity handover and parameter smoothing in the DSP path.
 
 The Xplorer control mapping and Launchkey protocol details remain hardware

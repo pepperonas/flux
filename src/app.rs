@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 
 use crate::engine::host::AudioHost;
 use crate::engine::telemetry::Telemetry;
@@ -53,6 +54,7 @@ pub struct FluxApp {
     xplorer: XplorerSource,
     help_open: bool,
     audio_devices: Vec<String>,
+    last_midi_scan: Instant,
 }
 
 impl FluxApp {
@@ -81,6 +83,7 @@ impl FluxApp {
             xplorer: XplorerSource::start(),
             help_open: false,
             audio_devices: AudioHost::devices(),
+            last_midi_scan: Instant::now(),
         }
     }
 }
@@ -140,6 +143,12 @@ impl eframe::App for FluxApp {
         let telemetry = self.audio.as_ref().map(|h| Arc::clone(&h.telemetry));
         if let Some(telemetry) = telemetry {
             self.service_audio(ctx, &telemetry);
+            if self.last_midi_scan.elapsed() >= Duration::from_secs(1) {
+                self.last_midi_scan = Instant::now();
+                if self.midi.ports_changed() {
+                    self.midi = MidiSource::connect_all(telemetry);
+                }
+            }
         }
 
         egui::TopBottomPanel::top("nav").show(ctx, |ui| {
@@ -291,6 +300,7 @@ mod tests {
             xplorer: XplorerSource::start(),
             help_open: false,
             audio_devices: Vec::new(),
+            last_midi_scan: Instant::now(),
         };
         let ctx = egui::Context::default();
         let raw = egui::RawInput {

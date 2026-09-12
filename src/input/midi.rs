@@ -72,6 +72,19 @@ struct MidiRuntime {
 }
 
 impl MidiSource {
+    pub fn visible_ports() -> Vec<String> {
+        MidiInput::new("FLUX MIDI discovery")
+            .ok()
+            .map(|input| {
+                input
+                    .ports()
+                    .iter()
+                    .filter_map(|port| input.port_name(port).ok())
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
     /// Connect every currently visible MIDI input. A missing or unavailable
     /// port is logged and does not stop the instrument from opening.
     pub fn connect_all(telemetry: Arc<Telemetry>) -> MidiSource {
@@ -82,17 +95,7 @@ impl MidiSource {
             messages: Arc::clone(&messages),
             last_message: Arc::clone(&last_message),
         });
-        let names: Vec<String> = match MidiInput::new("FLUX MIDI discovery") {
-            Ok(input) => input
-                .ports()
-                .iter()
-                .filter_map(|port| input.port_name(port).ok())
-                .collect(),
-            Err(err) => {
-                log::warn!("MIDI input unavailable: {err}");
-                return MidiSource::default();
-            }
-        };
+        let names = Self::visible_ports();
 
         let mut connections = Vec::with_capacity(names.len());
         let mut connected = Vec::with_capacity(names.len());
@@ -157,6 +160,10 @@ impl MidiSource {
 
     pub fn last_message(&self) -> Option<u64> {
         (self.messages() > 0).then(|| self.last_message.load(Ordering::Relaxed))
+    }
+
+    pub fn ports_changed(&self) -> bool {
+        Self::visible_ports() != self.ports
     }
 }
 
