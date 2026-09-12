@@ -1,4 +1,4 @@
-use crate::core::event::{Action, LoopCmd};
+use crate::core::event::{Action, LoopCmd, TransportCmd};
 use crate::engine::telemetry::{AudioCommand, Telemetry};
 use crate::ui::theme;
 
@@ -67,6 +67,11 @@ pub fn show(
             if playing { "PLAY" } else { "STOP" },
             bpm
         ));
+        if let Some(telemetry) = telemetry {
+            if ui.button(if playing { "STOP" } else { "PLAY" }).clicked() {
+                telemetry.push_command(AudioCommand::Act(Action::Transport(TransportCmd::Toggle)));
+            }
+        }
     });
 
     ui.add_space(18.0);
