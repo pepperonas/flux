@@ -294,7 +294,7 @@ impl AudioEngine {
             } else {
                 beat - phase
             };
-            if self.click_remaining > 0 || offset < frames as u64 {
+            if self.click_remaining == 0 && offset < frames as u64 {
                 self.click_remaining = 1;
             }
             if self.click_remaining > 0 {
@@ -420,6 +420,18 @@ mod tests {
         e.render(256);
         let peak = e.output()[..256].iter().fold(0.0f32, |a, b| a.max(b.abs()));
         assert!(peak > 0.001, "the engine stayed silent, peak {peak}");
+    }
+
+    #[test]
+    fn recording_starts_a_metronome_click() {
+        let mut e = engine();
+        e.telemetry
+            .push_command(AudioCommand::Act(Action::LoopControl(
+                crate::core::event::LoopCmd::ToggleRecord,
+            )));
+        e.render(256);
+        let peak = e.output()[..256].iter().fold(0.0f32, |a, b| a.max(b.abs()));
+        assert!(peak > 0.001, "recording click stayed silent, peak {peak}");
     }
 
     #[test]
