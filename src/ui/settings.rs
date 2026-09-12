@@ -1,14 +1,22 @@
-pub fn show(ui: &mut egui::Ui, devices: &[String], active: &str) -> Option<String> {
+pub enum SettingsAction {
+    Refresh,
+    Select(String),
+}
+
+pub fn show(ui: &mut egui::Ui, devices: &[String], active: &str) -> Option<SettingsAction> {
     ui.heading("SETTINGS");
     ui.add_space(8.0);
     ui.label("Audio output");
     let mut selected = None;
+    if ui.button("Refresh devices").clicked() {
+        selected = Some(SettingsAction::Refresh);
+    }
     if devices.is_empty() {
         ui.small("No output devices reported by the host.");
     } else {
         for device in devices {
             if ui.selectable_label(device == active, device).clicked() && device != active {
-                selected = Some(device.clone());
+                selected = Some(SettingsAction::Select(device.clone()));
             }
         }
     }

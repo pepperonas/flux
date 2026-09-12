@@ -192,8 +192,13 @@ impl eframe::App for FluxApp {
                 requested_device = ui::settings::show(ui, &self.audio_devices, active);
             }
         });
-        if let Some(device) = requested_device {
-            self.switch_audio_device(&device);
+        if let Some(action) = requested_device {
+            match action {
+                ui::settings::SettingsAction::Refresh => {
+                    self.audio_devices = AudioHost::devices();
+                }
+                ui::settings::SettingsAction::Select(device) => self.switch_audio_device(&device),
+            }
         }
         if self.help_open {
             egui::Window::new("FLUX HELP")
