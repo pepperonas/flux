@@ -52,6 +52,7 @@ pub struct FluxApp {
     midi: MidiSource,
     xplorer: XplorerSource,
     help_open: bool,
+    audio_devices: Vec<String>,
 }
 
 impl FluxApp {
@@ -79,6 +80,7 @@ impl FluxApp {
             midi,
             xplorer: XplorerSource::start(),
             help_open: false,
+            audio_devices: AudioHost::devices(),
         }
     }
 }
@@ -166,6 +168,7 @@ impl eframe::App for FluxApp {
                 &mut self.test_tone,
                 &self.midi,
                 &self.xplorer,
+                &self.audio_devices,
             ),
             View::Patch => ui::patch::show(ui),
         });
@@ -248,6 +251,7 @@ mod tests {
             midi: MidiSource::default(),
             xplorer: XplorerSource::start(),
             help_open: false,
+            audio_devices: Vec::new(),
         };
         let ctx = egui::Context::default();
         let raw = egui::RawInput {

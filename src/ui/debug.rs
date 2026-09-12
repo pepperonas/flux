@@ -10,6 +10,7 @@ pub fn show(
     test_tone: &mut bool,
     midi: &MidiSource,
     xplorer: &XplorerSource,
+    audio_devices: &[String],
 ) {
     ui.heading("DIAGNOSTICS");
     if let Some(err) = error {
@@ -58,6 +59,21 @@ pub fn show(
             ui.label(t.underruns().to_string());
             ui.end_row();
         });
+
+    ui.separator();
+    ui.label("Available audio outputs");
+    if audio_devices.is_empty() {
+        ui.small("No output devices reported by the host.");
+    } else {
+        for device in audio_devices {
+            let current = device == &host.device_name;
+            ui.small(if current {
+                format!("● {device} (active)")
+            } else {
+                format!("○ {device}")
+            });
+        }
+    }
 
     ui.separator();
     ui.label("Guitar Hero X-plorer");
