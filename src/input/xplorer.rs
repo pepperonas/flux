@@ -14,6 +14,32 @@ const ABSENT: u8 = 0;
 const CONNECTED: u8 = 1;
 const ERROR: u8 = 2;
 
+/// Compares successive reports while a controller control is moved. The
+/// learner reports byte positions only; assigning positions to controls is
+/// left to the setup flow and the physical device.
+#[derive(Default)]
+pub struct ReportLearner {
+    previous: Option<[u8; 32]>,
+}
+
+impl ReportLearner {
+    pub fn observe(&mut self, report: [u8; 32]) -> Vec<usize> {
+        let changed = self
+            .previous
+            .map(|previous| {
+                report
+                    .iter()
+                    .zip(previous)
+                    .enumerate()
+                    .filter_map(|(index, (current, old))| (current != &old).then_some(index))
+                    .collect()
+            })
+            .unwrap_or_default();
+        self.previous = Some(report);
+        changed
+    }
+}
+
 /// Raw-USB owner for the Xbox 360 X-plorer. It deliberately reports raw
 /// activity only: its byte layout is learned from the physical controller and
 /// must not be guessed from a similar guitar.
@@ -140,5 +166,21 @@ impl Drop for XplorerSource {
         if let Some(worker) = self.worker.take() {
             let _ = worker.join();
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::ReportLearner;
+
+    #[test]
+    fn report_learner_returns_changed_byte_positions() {
+        let mut learner = ReportLearner::default();
+        assert!(learner.observe([0; 32]).is_empty());
+        let mut next = [0; 32];
+        next[3] = 1;
+        next[17] = 255;
+        assert_eq!(learner.observe(next), vec![3, 17]);
+        assert!(learner.observe(next).is_empty());
     }
 }
