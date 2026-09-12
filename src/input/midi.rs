@@ -4,6 +4,7 @@ use std::sync::Arc;
 use midir::{MidiInput, MidiInputConnection};
 
 use crate::core::event::Action;
+use crate::core::ids::MacroId;
 use crate::engine::telemetry::{AudioCommand, Telemetry};
 
 /// Turns ordinary channel-voice MIDI notes into the same actions the computer
@@ -20,6 +21,19 @@ fn note_action(message: &[u8]) -> Option<Action> {
         0x80 | 0x90 => Some(Action::NoteOff { note: *note }),
         _ => None,
     }
+}
+
+fn control_action(message: &[u8]) -> Option<Action> {
+    let [status, controller, value, ..] = message else {
+        return None;
+    };
+    if status & 0xF0 != 0xB0 || !(21..=28).contains(controller) {
+        return None;
+    }
+    Some(Action::SetMacro {
+        macro_id: MacroId(*controller - 21),
+        value: *value as f32 / 127.0,
+    })
 }
 
 /// Owns open CoreMIDI/ALSA/WinMM connections. Keeping this value alive keeps
@@ -95,6 +109,8 @@ impl MidiSource {
                     runtime.last_message.store(packed, Ordering::Relaxed);
                     if let Some(action) = note_action(message) {
                         runtime.telemetry.push_command(AudioCommand::Act(action));
+                    } else if let Some(action) = control_action(message) {
+                        runtime.telemetry.push_command(AudioCommand::Act(action));
                     }
                 },
                 Arc::clone(&runtime),
@@ -151,5 +167,23 @@ mod tests {
     fn unrelated_messages_do_not_reach_the_audio_engine() {
         assert_eq!(note_action(&[0xB0, 74, 127]), None);
         assert_eq!(note_action(&[0xF8]), None);
+    }
+
+    #[test]
+    fn encoder_ccs_target_the_eight_macros() {
+        assert_eq!(
+            control_action(&[0xB0, 21, 127]),
+            Some(Action::SetMacro {
+                macro_id: MacroId(0),
+                value: 1.0
+            })
+        );
+        assert_eq!(
+            control_action(&[0xB7, 28, 64]),
+            Some(Action::SetMacro {
+                macro_id: MacroId(7),
+                value: 64.0 / 127.0
+            })
+        );
     }
 }
