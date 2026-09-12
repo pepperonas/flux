@@ -1,5 +1,7 @@
 # FLUX
 
+**Version 0.1.0** — M1b foundation
+
 **FLUX is not a DAW. FLUX is a playable music instrument.**
 
 A live music engine you play with a computer keyboard, a Guitar Hero controller
@@ -9,7 +11,9 @@ so that the first sixty seconds are interesting even if you have never used
 music software before.
 
 > Status: **early development.** The architecture is written down and agreed;
-> milestone 1 is being implemented. See [ROADMAP.md](docs/ROADMAP.md).
+> M1b foundation is implemented on the `m1b-looper` branch. See
+> [ROADMAP.md](docs/ROADMAP.md) and [CHANGELOG.md](CHANGELOG.md) for the exact
+> scope and remaining hardware work.
 
 ---
 
