@@ -11,6 +11,14 @@ priority list (§21). Where they disagree, the reason is stated.
 
 ## M1 — Foundation, sound, loop  ← current target
 
+### Implementation status (2026-09-12)
+
+The transport, bar-quantized four-track event looper, recording click,
+interactive performance controls, MIDI note input, and reconnect-safe raw
+Xplorer reader are implemented on branch `m1b-looper`. The remaining M1 work
+is the read-only patch view, device selection, and help overlay. Xplorer report
+bytes are exposed for hardware mapping; musical control mapping remains M3.
+
 **Goal: press a key, hear a synth, record a loop that stays in time.**
 This is the brief's §39 definition of done, built on the Phase-2 architecture
 rather than on something that would need replacing.
