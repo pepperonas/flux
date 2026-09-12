@@ -77,6 +77,20 @@ impl Default for EventLooper {
 }
 
 impl EventLooper {
+    pub fn scale_tempo(&mut self, old_samples_per_beat: f64, new_samples_per_beat: f64) {
+        if self.loop_len == 0 || old_samples_per_beat <= 0.0 || new_samples_per_beat <= 0.0 {
+            return;
+        }
+        let ratio = new_samples_per_beat / old_samples_per_beat;
+        self.loop_len = (self.loop_len as f64 * ratio).round().max(1.0) as u64;
+        for track in &mut self.tracks {
+            for event in track.events[..track.len].iter_mut().flatten() {
+                event.pos = (event.pos as f64 * ratio).round() as u64 % self.loop_len;
+            }
+            track.events[..track.len].sort_by_key(|event| event.expect("occupied").pos);
+        }
+    }
+
     pub fn state_codes(&self) -> u32 {
         self.tracks.iter().enumerate().fold(0, |bits, (i, track)| {
             let code = match track.state {
@@ -320,5 +334,32 @@ mod tests {
         l.handle(LoopCmd::Clear, 96_000, 24_000.0, 96_000.0);
         assert_eq!(l.loop_len, 0);
         assert_eq!(l.track_state(0), "EMPTY");
+    }
+
+    #[test]
+    fn tempo_scaling_moves_events_with_the_loop() {
+        let mut l = EventLooper {
+            loop_len: 96_000,
+            ..EventLooper::default()
+        };
+        l.handle(LoopCmd::ToggleRecord, 0, 24_000.0, 96_000.0);
+        l.record(
+            Action::NoteOn {
+                note: 60,
+                velocity: 1.0,
+            },
+            24_000,
+            24_000.0,
+        );
+        l.handle(LoopCmd::ToggleRecord, 96_000, 24_000.0, 96_000.0);
+        l.scale_tempo(24_000.0, 12_000.0);
+        assert_eq!(l.loop_len, 48_000);
+        assert_eq!(
+            l.events_in_block(12_000, 1)[0],
+            Some(Action::NoteOn {
+                note: 60,
+                velocity: 1.0
+            })
+        );
     }
 }
