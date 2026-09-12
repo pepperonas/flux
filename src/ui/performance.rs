@@ -132,7 +132,8 @@ pub fn show(
     ui.painter().rect_filled(filled, theme::R_SM, colour);
 
     ui.add_space(20.0);
-    ui.small("A W S E D F T G Y H U J K play.  Z X change octave.  C V change velocity.");
+    ui.small("R record  , clear  . undo  - mute  1–4 select track  SPACE play/stop");
+    ui.small("A W S E D F T G Y H U J K play  ·  Z/X octave  ·  C/V velocity");
 }
 
 #[cfg(test)]
