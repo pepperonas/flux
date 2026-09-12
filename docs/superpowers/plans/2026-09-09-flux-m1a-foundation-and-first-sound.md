@@ -210,7 +210,7 @@ If the claim **failed**, write the exact error into the document, and add a line
 - [ ] **Step 5: Commit the finding, not the code**
 
 ```bash
-cd /Users/martin/claude/FLUX
+cd <repo-root>
 git add docs/CONTROLLER_MAPPING.md docs/ROADMAP.md
 git commit -m "docs: record USB claim probe result for the X-plorer
 

@@ -6,7 +6,7 @@ where the new requirements demand it.*
 
 ## Finding: there is no prior code
 
-`/Users/martin/claude/FLUX` contained an empty `temp/` directory and no git
+`<repo-root>` contained an empty `temp/` directory and no git
 repository. No Rust project, no audio engine, no prototype. Phase 1 had reached
 the design-approval gate and stopped there deliberately; nothing had been
 written.
