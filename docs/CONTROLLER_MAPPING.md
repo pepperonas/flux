@@ -81,6 +81,11 @@ macro mapping (CC 21 → BRIGHT, through CC 28 → SPACE) on any channel. This i
 an implementation convenience, not a verified MK4 protocol claim; the exact
 per-control indices remain ❓ until they are observed from the physical unit.
 
+The input implementation also accepts a provisional channel-10 pad layout:
+notes 36–39 select loop tracks 1–4, 40 toggles recording, 41 clears, 42 undoes,
+and 43 mutes. These actions are intentionally input-only; pad LED feedback and
+the remaining pad assignments require physical-device verification.
+
 📄 Absolute CC on channel 16 in Plugin/Mixer/Sends modes; **relative** output in
 Transport mode with pivot `40h` — `41h` is one step clockwise, `3Fh` one step
 anticlockwise. 📄 The host can also switch encoders to relative output through

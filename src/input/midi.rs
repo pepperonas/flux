@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use midir::{MidiInput, MidiInputConnection};
 
-use crate::core::event::Action;
+use crate::core::event::{Action, LoopCmd};
 use crate::core::ids::MacroId;
 use crate::engine::telemetry::{AudioCommand, Telemetry};
 
@@ -34,6 +34,24 @@ fn control_action(message: &[u8]) -> Option<Action> {
         macro_id: MacroId(*controller - 21),
         value: *value as f32 / 127.0,
     })
+}
+
+fn pad_action(message: &[u8]) -> Option<Action> {
+    let [status, note, value, ..] = message else {
+        return None;
+    };
+    if status & 0xF0 != 0x90 || status & 0x0F != 9 || *value == 0 {
+        return None;
+    }
+    let command = match *note {
+        36..=39 => LoopCmd::Select(*note - 36),
+        40 => LoopCmd::ToggleRecord,
+        41 => LoopCmd::Clear,
+        42 => LoopCmd::Undo,
+        43 => LoopCmd::Mute,
+        _ => return None,
+    };
+    Some(Action::LoopControl(command))
 }
 
 /// Owns open CoreMIDI/ALSA/WinMM connections. Keeping this value alive keeps
@@ -107,7 +125,9 @@ impl MidiSource {
                             value | (u64::from(*byte) << (i * 8))
                         });
                     runtime.last_message.store(packed, Ordering::Relaxed);
-                    if let Some(action) = note_action(message) {
+                    if let Some(action) = pad_action(message) {
+                        runtime.telemetry.push_command(AudioCommand::Act(action));
+                    } else if let Some(action) = note_action(message) {
                         runtime.telemetry.push_command(AudioCommand::Act(action));
                     } else if let Some(action) = control_action(message) {
                         runtime.telemetry.push_command(AudioCommand::Act(action));
@@ -185,5 +205,18 @@ mod tests {
                 value: 64.0 / 127.0
             })
         );
+    }
+
+    #[test]
+    fn channel_ten_pads_control_the_looper() {
+        assert_eq!(
+            pad_action(&[0x99, 36, 127]),
+            Some(Action::LoopControl(LoopCmd::Select(0)))
+        );
+        assert_eq!(
+            pad_action(&[0x99, 40, 127]),
+            Some(Action::LoopControl(LoopCmd::ToggleRecord))
+        );
+        assert_eq!(pad_action(&[0x99, 36, 0]), None);
     }
 }
