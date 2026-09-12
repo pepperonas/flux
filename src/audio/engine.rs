@@ -241,7 +241,12 @@ impl AudioEngine {
                         TransportCmd::Play => self.transport.playing = true,
                         TransportCmd::Stop => self.transport.playing = false,
                         TransportCmd::Toggle => self.transport.playing = !self.transport.playing,
-                        TransportCmd::SetBpm(bpm) => self.transport.bpm = bpm.clamp(20.0, 300.0),
+                        TransportCmd::SetBpm(bpm) => {
+                            let old_spb = self.transport.samples_per_beat();
+                            self.transport.bpm = bpm.clamp(20.0, 300.0);
+                            self.looper
+                                .scale_tempo(old_spb, self.transport.samples_per_beat());
+                        }
                     },
                     Action::LoopControl(cmd) => self.looper.handle(
                         cmd,
