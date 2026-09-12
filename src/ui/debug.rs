@@ -91,6 +91,7 @@ pub fn show(
 
     ui.separator();
     ui.label("MIDI inputs");
+    ui.small(format!("{} messages received", midi.messages()));
     if midi.ports.is_empty() {
         ui.small("None connected at application start.");
     } else {

@@ -1,3 +1,4 @@
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 
 use midir::{MidiInput, MidiInputConnection};
@@ -26,14 +27,25 @@ fn note_action(message: &[u8]) -> Option<Action> {
 /// ports cleanly.
 #[derive(Default)]
 pub struct MidiSource {
-    _connections: Vec<MidiInputConnection<Arc<Telemetry>>>,
+    _connections: Vec<MidiInputConnection<Arc<MidiRuntime>>>,
     pub ports: Vec<String>,
+    messages: Arc<AtomicU64>,
+}
+
+struct MidiRuntime {
+    telemetry: Arc<Telemetry>,
+    messages: Arc<AtomicU64>,
 }
 
 impl MidiSource {
     /// Connect every currently visible MIDI input. A missing or unavailable
     /// port is logged and does not stop the instrument from opening.
     pub fn connect_all(telemetry: Arc<Telemetry>) -> MidiSource {
+        let messages = Arc::new(AtomicU64::new(0));
+        let runtime = Arc::new(MidiRuntime {
+            telemetry,
+            messages: Arc::clone(&messages),
+        });
         let names: Vec<String> = match MidiInput::new("FLUX MIDI discovery") {
             Ok(input) => input
                 .ports()
@@ -67,12 +79,13 @@ impl MidiSource {
             match input.connect(
                 &port,
                 &callback_name,
-                |_timestamp, message, telemetry| {
+                |_timestamp, message, runtime| {
+                    runtime.messages.fetch_add(1, Ordering::Relaxed);
                     if let Some(action) = note_action(message) {
-                        telemetry.push_command(AudioCommand::Act(action));
+                        runtime.telemetry.push_command(AudioCommand::Act(action));
                     }
                 },
-                Arc::clone(&telemetry),
+                Arc::clone(&runtime),
             ) {
                 Ok(connection) => {
                     log::info!("MIDI input connected: {name}");
@@ -85,7 +98,12 @@ impl MidiSource {
         MidiSource {
             _connections: connections,
             ports: connected,
+            messages,
         }
+    }
+
+    pub fn messages(&self) -> u64 {
+        self.messages.load(Ordering::Relaxed)
     }
 }
 
