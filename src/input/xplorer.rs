@@ -49,49 +49,53 @@ impl XplorerSource {
                         return;
                     }
                 };
-                let Some(handle) = context.open_device_with_vid_pid(VENDOR_ID, PRODUCT_ID) else {
-                    return;
-                };
-                if let Err(err) = handle.claim_interface(INTERFACE) {
-                    log::warn!("could not claim X-plorer interface {INTERFACE}: {err}");
-                    worker_state.store(ERROR, Ordering::Relaxed);
-                    return;
-                }
-                worker_state.store(CONNECTED, Ordering::Relaxed);
-                let mut report = [0u8; 32];
                 while worker_running.load(Ordering::Relaxed) {
-                    match handle.read_interrupt(
-                        INPUT_ENDPOINT,
-                        &mut report,
-                        Duration::from_millis(20),
-                    ) {
-                        Ok(_) => {
-                            worker_reports.fetch_add(1, Ordering::Relaxed);
-                            // Keep a compact fingerprint for diagnostics. The
-                            // raw layout is intentionally not interpreted here.
-                            let hash = report.iter().fold(0xcbf29ce484222325u64, |h, byte| {
-                                h.wrapping_mul(0x100000001b3).wrapping_add(u64::from(*byte))
-                            });
-                            worker_last_report.store(hash, Ordering::Relaxed);
-                            let bytes = report[..8]
-                                .iter()
-                                .enumerate()
-                                .fold(0u64, |value, (i, byte)| {
-                                    value | (u64::from(*byte) << (i * 8))
+                    let Some(handle) = context.open_device_with_vid_pid(VENDOR_ID, PRODUCT_ID)
+                    else {
+                        worker_state.store(ABSENT, Ordering::Relaxed);
+                        thread::sleep(Duration::from_millis(250));
+                        continue;
+                    };
+                    if let Err(err) = handle.claim_interface(INTERFACE) {
+                        log::warn!("could not claim X-plorer interface {INTERFACE}: {err}");
+                        worker_state.store(ERROR, Ordering::Relaxed);
+                        thread::sleep(Duration::from_millis(500));
+                        continue;
+                    }
+                    worker_state.store(CONNECTED, Ordering::Relaxed);
+                    let mut report = [0u8; 32];
+                    while worker_running.load(Ordering::Relaxed) {
+                        match handle.read_interrupt(
+                            INPUT_ENDPOINT,
+                            &mut report,
+                            Duration::from_millis(20),
+                        ) {
+                            Ok(_) => {
+                                worker_reports.fetch_add(1, Ordering::Relaxed);
+                                // Keep a compact fingerprint for diagnostics. The
+                                // raw layout is intentionally not interpreted here.
+                                let hash = report.iter().fold(0xcbf29ce484222325u64, |h, byte| {
+                                    h.wrapping_mul(0x100000001b3).wrapping_add(u64::from(*byte))
                                 });
-                            worker_last_bytes.store(bytes, Ordering::Relaxed);
-                        }
-                        Err(rusb::Error::Timeout) => {}
-                        Err(rusb::Error::NoDevice) => break,
-                        Err(err) => {
-                            log::warn!("X-plorer report read failed: {err}");
-                            worker_state.store(ERROR, Ordering::Relaxed);
-                            break;
+                                worker_last_report.store(hash, Ordering::Relaxed);
+                                let bytes = report[..8]
+                                    .iter()
+                                    .enumerate()
+                                    .fold(0u64, |value, (i, byte)| {
+                                        value | (u64::from(*byte) << (i * 8))
+                                    });
+                                worker_last_bytes.store(bytes, Ordering::Relaxed);
+                            }
+                            Err(rusb::Error::Timeout) => {}
+                            Err(rusb::Error::NoDevice) => break,
+                            Err(err) => {
+                                log::warn!("X-plorer report read failed: {err}");
+                                worker_state.store(ERROR, Ordering::Relaxed);
+                                break;
+                            }
                         }
                     }
-                }
-                let _ = handle.release_interface(INTERFACE);
-                if worker_state.load(Ordering::Relaxed) == CONNECTED {
+                    let _ = handle.release_interface(INTERFACE);
                     worker_state.store(ABSENT, Ordering::Relaxed);
                 }
             })
