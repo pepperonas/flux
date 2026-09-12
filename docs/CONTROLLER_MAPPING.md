@@ -76,6 +76,11 @@ row 2   drum voices / pattern triggers colour by voice, lit on hit
 
 ### Encoders — 8, endless
 
+The current input implementation accepts CC **21–28** as a provisional FLUX
+macro mapping (CC 21 → BRIGHT, through CC 28 → SPACE) on any channel. This is
+an implementation convenience, not a verified MK4 protocol claim; the exact
+per-control indices remain ❓ until they are observed from the physical unit.
+
 📄 Absolute CC on channel 16 in Plugin/Mixer/Sends modes; **relative** output in
 Transport mode with pivot `40h` — `41h` is one step clockwise, `3Fh` one step
 anticlockwise. 📄 The host can also switch encoders to relative output through
