@@ -1,3 +1,5 @@
+use crate::core::event::{Action, LoopCmd};
+use crate::engine::telemetry::{AudioCommand, Telemetry};
 use crate::ui::theme;
 
 /// Where the output meter turns red.
@@ -27,6 +29,7 @@ pub fn show(
     loop_len: u64,
     track_states: u32,
     active_track: usize,
+    telemetry: Option<&Telemetry>,
 ) {
     ui.heading("FLUX");
     ui.add_space(12.0);
@@ -75,6 +78,25 @@ pub fn show(
         }
     });
     ui.horizontal(|ui| {
+        let send = |cmd: LoopCmd| {
+            if let Some(telemetry) = telemetry {
+                telemetry.push_command(AudioCommand::Act(Action::LoopControl(cmd)));
+            }
+        };
+        if ui.button("● REC").clicked() {
+            send(LoopCmd::ToggleRecord);
+        }
+        if ui.button("CLEAR").clicked() {
+            send(LoopCmd::Clear);
+        }
+        if ui.button("UNDO").clicked() {
+            send(LoopCmd::Undo);
+        }
+        if ui.button("MUTE").clicked() {
+            send(LoopCmd::Mute);
+        }
+    });
+    ui.horizontal(|ui| {
         for i in 0..4 {
             let code = (track_states >> (i * 2)) & 0b11;
             let (label, colour) = match code {
@@ -100,6 +122,13 @@ pub fn show(
                     ui.vertical(|ui| {
                         ui.small(format!("TRACK {}", i + 1));
                         ui.colored_label(colour, label);
+                        if ui.small_button("select").clicked() {
+                            if let Some(telemetry) = telemetry {
+                                telemetry.push_command(AudioCommand::Act(Action::LoopControl(
+                                    LoopCmd::Select(i as u8),
+                                )));
+                            }
+                        }
                     });
                 });
         }

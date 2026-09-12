@@ -152,6 +152,7 @@ impl eframe::App for FluxApp {
                 self.audio
                     .as_ref()
                     .map_or(0, |h| h.telemetry.active_track()),
+                self.audio.as_ref().map(|h| h.telemetry.as_ref()),
             ),
             View::Debug => ui::debug::show(
                 ui,
