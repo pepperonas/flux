@@ -111,8 +111,14 @@ impl FluxApp {
                 self.midi = MidiSource::connect_all(telemetry);
                 self.audio = Some(host);
                 self.audio_error = None;
+                self.audio_devices = AudioHost::devices();
             }
-            Err(err) => self.audio_error = Some(err.to_string()),
+            Err(err) => {
+                log::warn!("could not switch audio device to {device}: {err}");
+                if self.audio.is_none() {
+                    self.audio_error = Some(err.to_string());
+                }
+            }
         }
     }
 }
