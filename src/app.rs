@@ -51,6 +51,7 @@ pub struct FluxApp {
     mapping: Mapping,
     midi: MidiSource,
     xplorer: XplorerSource,
+    help_open: bool,
 }
 
 impl FluxApp {
@@ -77,6 +78,7 @@ impl FluxApp {
             mapping: keyboard::default_mapping(),
             midi,
             xplorer: XplorerSource::start(),
+            help_open: false,
         }
     }
 }
@@ -105,6 +107,9 @@ impl eframe::App for FluxApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         // An instrument must redraw continuously: meters and note feedback are live.
         ctx.request_repaint();
+        if ctx.input(|input| input.key_pressed(egui::Key::Slash) && input.modifiers.shift) {
+            self.help_open = true;
+        }
 
         // Read this frame's key events before anything is drawn, so the
         // panels below always reflect this frame's state. Without a device
@@ -164,6 +169,21 @@ impl eframe::App for FluxApp {
             ),
             View::Patch => ui::patch::show(ui),
         });
+        if self.help_open {
+            egui::Window::new("FLUX HELP")
+                .open(&mut self.help_open)
+                .resizable(false)
+                .show(ctx, |ui| {
+                    ui.label("A W S E D F T G Y H U J K  play notes");
+                    ui.label("Z / X  octave down / up");
+                    ui.label("C / V  velocity down / up");
+                    ui.label("SPACE  play / stop");
+                    ui.label("R  record   ,  clear   .  undo   -  mute");
+                    ui.label("1–4  select loop track");
+                    ui.separator();
+                    ui.small("SHIFT+/ (?) opens this help window.");
+                });
+        }
     }
 }
 
@@ -227,6 +247,7 @@ mod tests {
             mapping: keyboard::default_mapping(),
             midi: MidiSource::default(),
             xplorer: XplorerSource::start(),
+            help_open: false,
         };
         let ctx = egui::Context::default();
         let raw = egui::RawInput {
