@@ -1,5 +1,6 @@
 pub enum SettingsAction {
     Refresh,
+    ReconnectMidi,
     Select(String),
 }
 
@@ -10,6 +11,9 @@ pub fn show(ui: &mut egui::Ui, devices: &[String], active: &str) -> Option<Setti
     let mut selected = None;
     if ui.button("Refresh devices").clicked() {
         selected = Some(SettingsAction::Refresh);
+    }
+    if ui.button("Reconnect MIDI").clicked() {
+        selected = Some(SettingsAction::ReconnectMidi);
     }
     if devices.is_empty() {
         ui.small("No output devices reported by the host.");

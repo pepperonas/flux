@@ -197,6 +197,11 @@ impl eframe::App for FluxApp {
                 ui::settings::SettingsAction::Refresh => {
                     self.audio_devices = AudioHost::devices();
                 }
+                ui::settings::SettingsAction::ReconnectMidi => {
+                    if let Some(host) = &self.audio {
+                        self.midi = MidiSource::connect_all(Arc::clone(&host.telemetry));
+                    }
+                }
                 ui::settings::SettingsAction::Select(device) => self.switch_audio_device(&device),
             }
         }
