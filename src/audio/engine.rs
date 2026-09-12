@@ -14,6 +14,7 @@ use crate::graph::schedule::{run, BufferPool, Schedule};
 use crate::params::macros::{macro_source, MACROS, MOD_SOURCE_COUNT};
 use crate::params::modmatrix::{ModMatrix, ModRoute};
 use crate::params::registry::{self as p, ParamRegistry, PARAM_COUNT};
+use crate::params::smoothing::Smoother;
 
 /// Owns every piece of DSP state. Lives entirely on the audio thread.
 ///
@@ -26,6 +27,7 @@ pub struct AudioEngine {
     pub telemetry: Arc<Telemetry>,
     pub params: ModMatrix,
     registry: ParamRegistry,
+    smoothed_params: Vec<Smoother>,
     pub transport: Transport,
     pub looper: EventLooper,
 
@@ -174,11 +176,20 @@ impl AudioEngine {
             .position(|n| n.id == output)
             .expect("the output module is in the patch");
 
+        params.recompute();
+        let mut smoothed_params: Vec<Smoother> = (0..PARAM_COUNT)
+            .map(|_| Smoother::new(sample_rate, 5.0))
+            .collect();
+        for (smoother, value) in smoothed_params.iter_mut().zip(params.values().iter()) {
+            smoother.snap(*value);
+        }
+
         AudioEngine {
             sample_rate,
             telemetry,
             params,
             registry,
+            smoothed_params,
             transport: Transport {
                 sample_rate,
                 ..Transport::default()
@@ -282,7 +293,10 @@ impl AudioEngine {
         self.params.recompute();
 
         let mut values = ParamValues::default();
-        values.0.copy_from_slice(self.params.values());
+        for (index, value) in self.params.values().iter().copied().enumerate() {
+            self.smoothed_params[index].set_target(value);
+            values.0[index] = self.smoothed_params[index].next();
+        }
 
         self.voice_bus[..frames].fill(0.0);
         self.voices
