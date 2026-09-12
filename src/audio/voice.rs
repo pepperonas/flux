@@ -54,6 +54,7 @@ pub struct Voice {
     /// Increments for every note started, so the oldest voice is identifiable.
     pub age: u64,
     velocity: f32,
+    velocity_gain: Smoother,
     osc_a: Osc,
     osc_b: Osc,
     filter: Svf,
@@ -67,6 +68,7 @@ impl Default for Voice {
             note: None,
             age: 0,
             velocity: 0.0,
+            velocity_gain: Smoother::new(48_000.0, 5.0),
             osc_a: Osc::default(),
             osc_b: Osc::default(),
             filter: Svf::default(),
@@ -82,7 +84,13 @@ impl Voice {
         // made. It is read before `note` is overwritten.
         let taking_over = self.note.is_some();
         self.note = Some(note);
-        self.velocity = velocity.clamp(0.0, 1.0);
+        let velocity = velocity.clamp(0.0, 1.0);
+        if taking_over {
+            self.velocity_gain.set_target(velocity);
+        } else {
+            self.velocity_gain.snap(velocity);
+        }
+        self.velocity = velocity;
         // Oscillator phases are deliberately not reset. Restarting every voice
         // from phase zero makes stacked notes sum coherently on their first
         // cycle, which reads as a click at the start of a chord.
@@ -160,15 +168,13 @@ impl Voice {
         let base = note as f32;
         let freq_a = note_to_freq(base - detune / 100.0);
         let freq_b = note_to_freq(base + detune / 100.0);
-        let amp = level * self.velocity;
-
         for sample in out.iter_mut() {
             let env = self.env.tick(&adsr, sample_rate);
             let raw = 0.5
                 * (self.osc_a.tick(freq_a, sample_rate, wave)
                     + self.osc_b.tick(freq_b, sample_rate, wave));
             let filtered = self.filter.lowpass(raw, cutoff, resonance, sample_rate);
-            *sample += filtered * env * amp;
+            *sample += filtered * env * level * self.velocity_gain.next();
         }
 
         if self.env.is_idle() {
