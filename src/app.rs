@@ -119,7 +119,7 @@ impl eframe::App for FluxApp {
 
         egui::TopBottomPanel::top("nav").show(ctx, |ui| {
             ui.horizontal(|ui| {
-                for view in [View::Performance, View::Debug] {
+                for view in [View::Performance, View::Patch, View::Debug] {
                     if ui
                         .selectable_label(self.view == view, view.label())
                         .clicked()
@@ -162,6 +162,7 @@ impl eframe::App for FluxApp {
                 &self.midi,
                 &self.xplorer,
             ),
+            View::Patch => ui::patch::show(ui),
         });
     }
 }

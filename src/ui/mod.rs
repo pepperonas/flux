@@ -1,4 +1,5 @@
 pub mod debug;
+pub mod patch;
 pub mod performance;
 pub mod theme;
 
@@ -6,6 +7,7 @@ pub mod theme;
 pub enum View {
     #[default]
     Performance,
+    Patch,
     Debug,
 }
 
@@ -13,6 +15,7 @@ impl View {
     pub fn label(self) -> &'static str {
         match self {
             View::Performance => "PERFORMANCE",
+            View::Patch => "PATCH",
             View::Debug => "DIAGNOSTICS",
         }
     }
