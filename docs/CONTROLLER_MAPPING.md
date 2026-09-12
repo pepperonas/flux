@@ -180,6 +180,10 @@ touching the controller — its resting/idle state, not a control identification
 No control was pressed during the probe (run unattended), so no byte-to-control
 mapping was learned; that remains entirely the setup wizard's job.
 
+The Diagnostics view now exposes the latest report bytes and a 32-bit changed-byte
+mask. This makes each physical movement observable before assigning a control
+name and keeps the mapping evidence separate from the audio path.
+
 Controls: 5 frets · strum up/down · whammy · tilt · start · select · d-pad.
 It has no feedback, so its `render` is a no-op.
 
