@@ -103,6 +103,18 @@ impl FluxApp {
         self.keyboard.pump(ctx, &self.mapping, telemetry);
         drain_engine_events(telemetry);
     }
+
+    fn switch_audio_device(&mut self, device: &str) {
+        match AudioHost::start(Some(device)) {
+            Ok(host) => {
+                let telemetry = Arc::clone(&host.telemetry);
+                self.midi = MidiSource::connect_all(telemetry);
+                self.audio = Some(host);
+                self.audio_error = None;
+            }
+            Err(err) => self.audio_error = Some(err.to_string()),
+        }
+    }
 }
 
 impl eframe::App for FluxApp {
@@ -126,7 +138,7 @@ impl eframe::App for FluxApp {
 
         egui::TopBottomPanel::top("nav").show(ctx, |ui| {
             ui.horizontal(|ui| {
-                for view in [View::Performance, View::Patch, View::Debug] {
+                for view in [View::Performance, View::Patch, View::Settings, View::Debug] {
                     if ui
                         .selectable_label(self.view == view, view.label())
                         .clicked()
@@ -137,6 +149,7 @@ impl eframe::App for FluxApp {
             });
         });
 
+        let mut requested_device = None;
         egui::CentralPanel::default().show(ctx, |ui| match self.view {
             View::Performance => ui::performance::show(
                 ui,
@@ -171,7 +184,17 @@ impl eframe::App for FluxApp {
                 &self.audio_devices,
             ),
             View::Patch => ui::patch::show(ui),
+            View::Settings => {
+                let active = self
+                    .audio
+                    .as_ref()
+                    .map_or("", |host| host.device_name.as_str());
+                requested_device = ui::settings::show(ui, &self.audio_devices, active);
+            }
         });
+        if let Some(device) = requested_device {
+            self.switch_audio_device(&device);
+        }
         if self.help_open {
             egui::Window::new("FLUX HELP")
                 .open(&mut self.help_open)

@@ -1,0 +1,18 @@
+pub fn show(ui: &mut egui::Ui, devices: &[String], active: &str) -> Option<String> {
+    ui.heading("SETTINGS");
+    ui.add_space(8.0);
+    ui.label("Audio output");
+    let mut selected = None;
+    if devices.is_empty() {
+        ui.small("No output devices reported by the host.");
+    } else {
+        for device in devices {
+            if ui.selectable_label(device == active, device).clicked() && device != active {
+                selected = Some(device.clone());
+            }
+        }
+    }
+    ui.add_space(12.0);
+    ui.small("Changing the device restarts the audio stream.");
+    selected
+}
