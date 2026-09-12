@@ -66,6 +66,9 @@ pub fn show(
         xplorer.status(),
         xplorer.reports()
     ));
+    if let Some(fingerprint) = xplorer.last_report_fingerprint() {
+        ui.small(format!("last report fingerprint: {fingerprint:016x}"));
+    }
 
     ui.separator();
     ui.label("MIDI inputs");

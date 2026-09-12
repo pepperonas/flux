@@ -20,6 +20,7 @@ const ERROR: u8 = 2;
 pub struct XplorerSource {
     state: Arc<AtomicU8>,
     reports: Arc<AtomicU64>,
+    last_report: Arc<AtomicU64>,
     running: Arc<AtomicBool>,
     worker: Option<JoinHandle<()>>,
 }
@@ -28,9 +29,11 @@ impl XplorerSource {
     pub fn start() -> XplorerSource {
         let state = Arc::new(AtomicU8::new(ABSENT));
         let reports = Arc::new(AtomicU64::new(0));
+        let last_report = Arc::new(AtomicU64::new(0));
         let running = Arc::new(AtomicBool::new(true));
         let worker_state = Arc::clone(&state);
         let worker_reports = Arc::clone(&reports);
+        let worker_last_report = Arc::clone(&last_report);
         let worker_running = Arc::clone(&running);
         let worker = thread::Builder::new()
             .name("flux-xplorer-usb".into())
@@ -61,6 +64,12 @@ impl XplorerSource {
                     ) {
                         Ok(_) => {
                             worker_reports.fetch_add(1, Ordering::Relaxed);
+                            // Keep a compact fingerprint for diagnostics. The
+                            // raw layout is intentionally not interpreted here.
+                            let hash = report.iter().fold(0xcbf29ce484222325u64, |h, byte| {
+                                h.wrapping_mul(0x100000001b3).wrapping_add(u64::from(*byte))
+                            });
+                            worker_last_report.store(hash, Ordering::Relaxed);
                         }
                         Err(rusb::Error::Timeout) => {}
                         Err(rusb::Error::NoDevice) => break,
@@ -81,6 +90,7 @@ impl XplorerSource {
         XplorerSource {
             state,
             reports,
+            last_report,
             running,
             worker,
         }
@@ -96,6 +106,11 @@ impl XplorerSource {
 
     pub fn reports(&self) -> u64 {
         self.reports.load(Ordering::Relaxed)
+    }
+
+    pub fn last_report_fingerprint(&self) -> Option<u64> {
+        let value = self.last_report.load(Ordering::Relaxed);
+        (value != 0).then_some(value)
     }
 }
 
