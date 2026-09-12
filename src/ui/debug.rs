@@ -92,6 +92,9 @@ pub fn show(
     ui.separator();
     ui.label("MIDI inputs");
     ui.small(format!("{} messages received", midi.messages()));
+    if let Some(message) = midi.last_message() {
+        ui.small(format!("last message bytes: {message:016x}"));
+    }
     if midi.ports.is_empty() {
         ui.small("None connected at application start.");
     } else {

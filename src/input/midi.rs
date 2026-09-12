@@ -30,11 +30,13 @@ pub struct MidiSource {
     _connections: Vec<MidiInputConnection<Arc<MidiRuntime>>>,
     pub ports: Vec<String>,
     messages: Arc<AtomicU64>,
+    last_message: Arc<AtomicU64>,
 }
 
 struct MidiRuntime {
     telemetry: Arc<Telemetry>,
     messages: Arc<AtomicU64>,
+    last_message: Arc<AtomicU64>,
 }
 
 impl MidiSource {
@@ -42,9 +44,11 @@ impl MidiSource {
     /// port is logged and does not stop the instrument from opening.
     pub fn connect_all(telemetry: Arc<Telemetry>) -> MidiSource {
         let messages = Arc::new(AtomicU64::new(0));
+        let last_message = Arc::new(AtomicU64::new(0));
         let runtime = Arc::new(MidiRuntime {
             telemetry,
             messages: Arc::clone(&messages),
+            last_message: Arc::clone(&last_message),
         });
         let names: Vec<String> = match MidiInput::new("FLUX MIDI discovery") {
             Ok(input) => input
@@ -81,6 +85,14 @@ impl MidiSource {
                 &callback_name,
                 |_timestamp, message, runtime| {
                     runtime.messages.fetch_add(1, Ordering::Relaxed);
+                    let packed = message
+                        .iter()
+                        .take(8)
+                        .enumerate()
+                        .fold(0u64, |value, (i, byte)| {
+                            value | (u64::from(*byte) << (i * 8))
+                        });
+                    runtime.last_message.store(packed, Ordering::Relaxed);
                     if let Some(action) = note_action(message) {
                         runtime.telemetry.push_command(AudioCommand::Act(action));
                     }
@@ -99,11 +111,16 @@ impl MidiSource {
             _connections: connections,
             ports: connected,
             messages,
+            last_message,
         }
     }
 
     pub fn messages(&self) -> u64 {
         self.messages.load(Ordering::Relaxed)
+    }
+
+    pub fn last_message(&self) -> Option<u64> {
+        (self.messages() > 0).then(|| self.last_message.load(Ordering::Relaxed))
     }
 }
 
