@@ -21,6 +21,7 @@ pub struct XplorerSource {
     state: Arc<AtomicU8>,
     reports: Arc<AtomicU64>,
     last_report: Arc<AtomicU64>,
+    last_bytes: Arc<AtomicU64>,
     running: Arc<AtomicBool>,
     worker: Option<JoinHandle<()>>,
 }
@@ -30,10 +31,12 @@ impl XplorerSource {
         let state = Arc::new(AtomicU8::new(ABSENT));
         let reports = Arc::new(AtomicU64::new(0));
         let last_report = Arc::new(AtomicU64::new(0));
+        let last_bytes = Arc::new(AtomicU64::new(0));
         let running = Arc::new(AtomicBool::new(true));
         let worker_state = Arc::clone(&state);
         let worker_reports = Arc::clone(&reports);
         let worker_last_report = Arc::clone(&last_report);
+        let worker_last_bytes = Arc::clone(&last_bytes);
         let worker_running = Arc::clone(&running);
         let worker = thread::Builder::new()
             .name("flux-xplorer-usb".into())
@@ -70,6 +73,13 @@ impl XplorerSource {
                                 h.wrapping_mul(0x100000001b3).wrapping_add(u64::from(*byte))
                             });
                             worker_last_report.store(hash, Ordering::Relaxed);
+                            let bytes = report[..8]
+                                .iter()
+                                .enumerate()
+                                .fold(0u64, |value, (i, byte)| {
+                                    value | (u64::from(*byte) << (i * 8))
+                                });
+                            worker_last_bytes.store(bytes, Ordering::Relaxed);
                         }
                         Err(rusb::Error::Timeout) => {}
                         Err(rusb::Error::NoDevice) => break,
@@ -91,6 +101,7 @@ impl XplorerSource {
             state,
             reports,
             last_report,
+            last_bytes,
             running,
             worker,
         }
@@ -111,6 +122,11 @@ impl XplorerSource {
     pub fn last_report_fingerprint(&self) -> Option<u64> {
         let value = self.last_report.load(Ordering::Relaxed);
         (value != 0).then_some(value)
+    }
+
+    pub fn last_report_bytes(&self) -> Option<u64> {
+        let value = self.last_bytes.load(Ordering::Relaxed);
+        (self.last_report_fingerprint().is_some()).then_some(value)
     }
 }
 
