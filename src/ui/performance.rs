@@ -68,8 +68,18 @@ pub fn show(
             bpm
         ));
         if let Some(telemetry) = telemetry {
+            if ui.small_button("−").clicked() {
+                telemetry.push_command(AudioCommand::Act(Action::Transport(TransportCmd::SetBpm(
+                    (bpm - 1.0).max(20.0),
+                ))));
+            }
             if ui.button(if playing { "STOP" } else { "PLAY" }).clicked() {
                 telemetry.push_command(AudioCommand::Act(Action::Transport(TransportCmd::Toggle)));
+            }
+            if ui.small_button("+").clicked() {
+                telemetry.push_command(AudioCommand::Act(Action::Transport(TransportCmd::SetBpm(
+                    (bpm + 1.0).min(300.0),
+                ))));
             }
         }
     });

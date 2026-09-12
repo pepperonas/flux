@@ -127,11 +127,12 @@ pub struct ControlEvent {
     pub host_time_ns: u64,
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, PartialEq, Debug)]
 pub enum TransportCmd {
     Play,
     Stop,
     Toggle,
+    SetBpm(f32),
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
