@@ -44,6 +44,8 @@ pub struct AudioEngine {
 
     test_tone: bool,
     test_phase: f32,
+    click_remaining: usize,
+    click_phase: f32,
 }
 
 impl AudioEngine {
@@ -193,6 +195,8 @@ impl AudioEngine {
             out: vec![0.0; max_block],
             test_tone: false,
             test_phase: 0.0,
+            click_remaining: 0,
+            click_phase: 0.0,
         }
     }
 
@@ -277,6 +281,44 @@ impl AudioEngine {
         self.voice_bus[..frames].fill(0.0);
         self.voices
             .render(&mut self.voice_bus[..frames], &values, self.sample_rate);
+
+        // Give recording a short timing reference without adding a permanent
+        // sound source to the instrument. The click starts at the first beat
+        // boundary crossed by this block and decays over 40 ms.
+        let recording = self.looper.state_codes() & 0b11 == 1;
+        if recording && self.transport.playing {
+            let beat = self.transport.samples_per_beat().round().max(1.0) as u64;
+            let phase = self.transport.sample_pos % beat;
+            let offset = if self.click_remaining > 0 || phase == 0 {
+                0
+            } else {
+                beat - phase
+            };
+            if self.click_remaining > 0 || offset < frames as u64 {
+                self.click_remaining = 1;
+            }
+            if self.click_remaining > 0 {
+                for (index, sample) in self.voice_bus[..frames].iter_mut().enumerate() {
+                    if index < offset as usize {
+                        continue;
+                    }
+                    let age = self.click_remaining;
+                    let envelope = (age as f32 / (self.sample_rate * 0.04)).clamp(0.0, 1.0);
+                    *sample += (self.click_phase * std::f32::consts::TAU).sin() * 0.12 * envelope;
+                    self.click_phase += 1760.0 / self.sample_rate;
+                    if self.click_phase >= 1.0 {
+                        self.click_phase -= 1.0;
+                    }
+                    self.click_remaining += 1;
+                    if self.click_remaining >= (self.sample_rate * 0.04) as usize {
+                        self.click_remaining = 0;
+                        break;
+                    }
+                }
+            }
+        } else {
+            self.click_remaining = 0;
+        }
 
         if self.test_tone {
             let inc = 440.0 / self.sample_rate;
