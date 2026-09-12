@@ -459,6 +459,23 @@ mod tests {
     }
 
     #[test]
+    fn bpm_commands_are_clamped_and_applied_on_audio_thread() {
+        let mut e = engine();
+        e.telemetry
+            .push_command(AudioCommand::Act(Action::Transport(TransportCmd::SetBpm(
+                999.0,
+            ))));
+        e.render(1);
+        assert_eq!(e.transport.bpm, 300.0);
+        e.telemetry
+            .push_command(AudioCommand::Act(Action::Transport(TransportCmd::SetBpm(
+                1.0,
+            ))));
+        e.render(1);
+        assert_eq!(e.transport.bpm, 20.0);
+    }
+
+    #[test]
     fn commands_are_drained_every_block_not_one_per_block() {
         // Sixteen notes pushed together must all sound in the same block. A
         // one-per-block drain would spread a chord over a quarter of a second.
