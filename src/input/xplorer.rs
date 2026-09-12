@@ -48,6 +48,7 @@ pub struct XplorerSource {
     reports: Arc<AtomicU64>,
     last_report: Arc<AtomicU64>,
     last_bytes: Arc<AtomicU64>,
+    changed_mask: Arc<AtomicU64>,
     running: Arc<AtomicBool>,
     worker: Option<JoinHandle<()>>,
 }
@@ -58,11 +59,13 @@ impl XplorerSource {
         let reports = Arc::new(AtomicU64::new(0));
         let last_report = Arc::new(AtomicU64::new(0));
         let last_bytes = Arc::new(AtomicU64::new(0));
+        let changed_mask = Arc::new(AtomicU64::new(0));
         let running = Arc::new(AtomicBool::new(true));
         let worker_state = Arc::clone(&state);
         let worker_reports = Arc::clone(&reports);
         let worker_last_report = Arc::clone(&last_report);
         let worker_last_bytes = Arc::clone(&last_bytes);
+        let worker_changed_mask = Arc::clone(&changed_mask);
         let worker_running = Arc::clone(&running);
         let worker = thread::Builder::new()
             .name("flux-xplorer-usb".into())
@@ -90,6 +93,8 @@ impl XplorerSource {
                     }
                     worker_state.store(CONNECTED, Ordering::Relaxed);
                     let mut report = [0u8; 32];
+                    let mut previous_report = [0u8; 32];
+                    let mut have_previous = false;
                     while worker_running.load(Ordering::Relaxed) {
                         match handle.read_interrupt(
                             INPUT_ENDPOINT,
@@ -111,6 +116,21 @@ impl XplorerSource {
                                         value | (u64::from(*byte) << (i * 8))
                                     });
                                 worker_last_bytes.store(bytes, Ordering::Relaxed);
+                                if have_previous {
+                                    let mask = report.iter().zip(previous_report).enumerate().fold(
+                                        0u64,
+                                        |mask, (index, (current, previous))| {
+                                            if current != &previous {
+                                                mask | (1u64 << index)
+                                            } else {
+                                                mask
+                                            }
+                                        },
+                                    );
+                                    worker_changed_mask.store(mask, Ordering::Relaxed);
+                                }
+                                previous_report = report;
+                                have_previous = true;
                             }
                             Err(rusb::Error::Timeout) => {}
                             Err(rusb::Error::NoDevice) => break,
@@ -132,6 +152,7 @@ impl XplorerSource {
             reports,
             last_report,
             last_bytes,
+            changed_mask,
             running,
             worker,
         }
@@ -157,6 +178,11 @@ impl XplorerSource {
     pub fn last_report_bytes(&self) -> Option<u64> {
         let value = self.last_bytes.load(Ordering::Relaxed);
         (self.last_report_fingerprint().is_some()).then_some(value)
+    }
+
+    pub fn changed_byte_mask(&self) -> Option<u64> {
+        self.last_report_fingerprint()
+            .map(|_| self.changed_mask.load(Ordering::Relaxed))
     }
 }
 

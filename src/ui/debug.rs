@@ -88,6 +88,9 @@ pub fn show(
     if let Some(bytes) = xplorer.last_report_bytes() {
         ui.small(format!("last report bytes[0..8]: {bytes:016x}"));
     }
+    if let Some(mask) = xplorer.changed_byte_mask() {
+        ui.small(format!("changed byte mask: {mask:016x}"));
+    }
 
     ui.separator();
     ui.label("MIDI inputs");
