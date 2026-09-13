@@ -49,6 +49,9 @@ fn pad_action(message: &[u8]) -> Option<Action> {
         41 => LoopCmd::Clear,
         42 => LoopCmd::Undo,
         43 => LoopCmd::Mute,
+        44 => return Some(Action::Transport(crate::core::event::TransportCmd::Toggle)),
+        45 => return Some(Action::Transport(crate::core::event::TransportCmd::Stop)),
+        46 => return Some(Action::Transport(crate::core::event::TransportCmd::Play)),
         _ => return None,
     };
     Some(Action::LoopControl(command))
@@ -224,6 +227,10 @@ mod tests {
         assert_eq!(
             pad_action(&[0x99, 40, 127]),
             Some(Action::LoopControl(LoopCmd::ToggleRecord))
+        );
+        assert_eq!(
+            pad_action(&[0x99, 44, 127]),
+            Some(Action::Transport(crate::core::event::TransportCmd::Toggle))
         );
         assert_eq!(pad_action(&[0x99, 36, 0]), None);
     }
