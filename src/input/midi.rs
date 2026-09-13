@@ -59,7 +59,19 @@ fn pad_action(message: &[u8]) -> Option<Action> {
 
 pub fn pad_rgb_sysex(pad: u8, red: u8, green: u8, blue: u8) -> Vec<u8> {
     vec![
-        0xF0, 0x00, 0x20, 0x29, 0x02, 0x13, 0x01, 0x43, pad, red, green, blue, 0xF7,
+        0xF0,
+        0x00,
+        0x20,
+        0x29,
+        0x02,
+        0x13,
+        0x01,
+        0x43,
+        pad.min(127),
+        red.min(127),
+        green.min(127),
+        blue.min(127),
+        0xF7,
     ]
 }
 
@@ -264,9 +276,9 @@ impl MidiSource {
                     };
                     let _ = connection.send(&[0x9A, 36 + track, velocity]);
                     let (mut red, mut green, mut blue) = match code {
-                        1 => (255, 24, 24),
-                        2 => (24, 220, 96),
-                        3 => (255, 160, 24),
+                        1 => (127, 12, 12),
+                        2 => (12, 110, 48),
+                        3 => (127, 80, 12),
                         _ => (0, 0, 0),
                     };
                     if track as usize != active_track && code != 0 {
@@ -378,7 +390,7 @@ mod tests {
     fn pad_rgb_sysex_uses_the_mini_mk4_product_id() {
         assert_eq!(
             pad_rgb_sysex(3, 255, 32, 7),
-            vec![0xF0, 0x00, 0x20, 0x29, 0x02, 0x13, 0x01, 0x43, 3, 255, 32, 7, 0xF7]
+            vec![0xF0, 0x00, 0x20, 0x29, 0x02, 0x13, 0x01, 0x43, 3, 127, 32, 7, 0xF7]
         );
     }
 }

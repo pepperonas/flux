@@ -30,6 +30,7 @@ notes started by loop playback.
   feedback.
 - Loop-pad RGB feedback now reflects empty, recording, playing, and muted
   states when a DAW output is connected.
+- RGB SysEx values are clamped to MIDI's valid 7-bit data range.
 - Voice-steal velocity handover and parameter smoothing in the DSP path.
 - Correct note-off handling for chord-bound notes after modifier release.
 - Sample-offset loop playback: note events now enter the voice engine at their
