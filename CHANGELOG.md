@@ -2,6 +2,8 @@
 
 ## 0.1.0 — M1b foundation
 
+The binary reports this version with `--version` / `-V`.
+
 - Real-time synth engine with transport, recording click, and four-track event
   looper.
 - Performance, read-only patch, diagnostics, and settings views.

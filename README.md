@@ -21,6 +21,9 @@ Diagnostics shows the current MIDI and Xplorer connection state. The Xplorer
 reader is reconnect-safe as well, while its control-byte mapping remains a
 hardware verification step.
 
+The current package version is `0.1.0`; run `cargo run -- --version` to print
+it without opening the GUI.
+
 ---
 
 ## Why it exists

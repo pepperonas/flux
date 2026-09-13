@@ -14,6 +14,10 @@ mod params;
 mod ui;
 
 fn main() -> eframe::Result<()> {
+    if std::env::args().any(|arg| arg == "--version" || arg == "-V") {
+        println!("flux {}", env!("CARGO_PKG_VERSION"));
+        return Ok(());
+    }
     env_logger::init();
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
