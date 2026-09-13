@@ -20,6 +20,10 @@ device selection, help overlay, and device-list refresh are now implemented.
 Xplorer report bytes are exposed for hardware mapping; musical control mapping
 remains M3.
 
+Audio stream failures are published to the interface and retried once per
+second. A failed preferred output may fall back to the system default rather
+than leaving the application silent.
+
 **Goal: press a key, hear a synth, record a loop that stays in time.**
 This is the brief's §39 definition of done, built on the Phase-2 architecture
 rather than on something that would need replacing.

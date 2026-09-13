@@ -11,6 +11,7 @@
   and report-difference learner.
 - Automatic MIDI port change detection and visible MIDI/Xplorer connection
   indicators in Diagnostics.
+- Automatic audio-stream recovery with a visible running/recovering indicator.
 - Voice-steal velocity handover and parameter smoothing in the DSP path.
 
 The Xplorer control mapping and Launchkey protocol details remain hardware

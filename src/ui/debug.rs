@@ -25,6 +25,20 @@ pub fn show(
         .num_columns(2)
         .spacing([24.0, 6.0])
         .show(ui, |ui| {
+            ui.label("Audio status");
+            ui.colored_label(
+                if host.failed() {
+                    crate::ui::theme::DANGER
+                } else {
+                    crate::ui::theme::ACCENT
+                },
+                if host.failed() {
+                    "● recovering"
+                } else {
+                    "● running"
+                },
+            );
+            ui.end_row();
             ui.label("Device");
             ui.label(&host.device_name);
             ui.end_row();

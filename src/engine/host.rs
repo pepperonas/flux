@@ -1,4 +1,4 @@
-use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -125,6 +125,7 @@ pub struct AudioHost {
     pub sample_rate: f32,
     buffer_frames: Arc<ObservedBufferSize>,
     pub telemetry: Arc<Telemetry>,
+    failed: Arc<AtomicBool>,
 }
 
 impl AudioHost {
@@ -149,6 +150,10 @@ impl AudioHost {
     pub fn latency_ms(&self) -> Option<f32> {
         self.buffer_frames()
             .map(|frames| frames as f32 / self.sample_rate * 1000.0)
+    }
+
+    pub fn failed(&self) -> bool {
+        self.failed.load(Ordering::Relaxed)
     }
 
     pub fn start(preferred: Option<&str>) -> Result<AudioHost, HostError> {
@@ -177,6 +182,7 @@ impl AudioHost {
         stream_config.buffer_size = cpal::BufferSize::Fixed(REQUESTED_BUFFER_FRAMES);
 
         let telemetry = Telemetry::new(1024);
+        let failed = Arc::new(AtomicBool::new(false));
         let mut engine = AudioEngine::new(sample_rate, 2048, Arc::clone(&telemetry));
 
         // Published asynchronously by whichever callback actually runs, and
@@ -187,6 +193,7 @@ impl AudioHost {
 
         let cb_telemetry = Arc::clone(&telemetry);
         let cb_observed = Arc::clone(&observed_frames);
+        let cb_failed = Arc::clone(&failed);
         let build = device.build_output_stream(
             &stream_config,
             move |data: &mut [f32], _: &cpal::OutputCallbackInfo| {
@@ -207,6 +214,7 @@ impl AudioHost {
                 // A device error must never take the process down. The interface
                 // reports it; the player's loops keep running.
                 log::error!("audio stream error: {err}");
+                cb_failed.store(true, Ordering::Relaxed);
             },
             None,
         );
@@ -219,6 +227,7 @@ impl AudioHost {
                 let fallback: cpal::StreamConfig = config.into();
                 let cb_telemetry2 = Arc::clone(&telemetry);
                 let observed2 = Arc::clone(&observed_frames);
+                let failed2 = Arc::clone(&failed);
                 let mut engine2 = AudioEngine::new(sample_rate, 4096, Arc::clone(&telemetry));
                 device
                     .build_output_stream(
@@ -248,7 +257,10 @@ impl AudioHost {
                                 started.elapsed(),
                             );
                         },
-                        move |err| log::error!("audio stream error: {err}"),
+                        move |err| {
+                            log::error!("audio stream error: {err}");
+                            failed2.store(true, Ordering::Relaxed);
+                        },
                         None,
                     )
                     .map_err(|e| HostError::Stream(e.to_string()))?
@@ -265,6 +277,7 @@ impl AudioHost {
             sample_rate,
             buffer_frames: observed_frames,
             telemetry,
+            failed,
         })
     }
 }

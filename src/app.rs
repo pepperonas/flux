@@ -55,6 +55,7 @@ pub struct FluxApp {
     help_open: bool,
     audio_devices: Vec<String>,
     last_midi_scan: Instant,
+    last_audio_recovery: Instant,
 }
 
 impl FluxApp {
@@ -84,6 +85,7 @@ impl FluxApp {
             help_open: false,
             audio_devices: AudioHost::devices(),
             last_midi_scan: Instant::now(),
+            last_audio_recovery: Instant::now(),
         }
     }
 }
@@ -147,6 +149,27 @@ impl eframe::App for FluxApp {
                 self.last_midi_scan = Instant::now();
                 if self.midi.ports_changed() {
                     self.midi = MidiSource::connect_all(telemetry);
+                }
+            }
+        }
+        if self.last_audio_recovery.elapsed() >= Duration::from_secs(1) {
+            self.last_audio_recovery = Instant::now();
+            let failed_device = self
+                .audio
+                .as_ref()
+                .filter(|host| host.failed())
+                .map(|host| host.device_name.clone());
+            if let Some(device) = failed_device {
+                self.switch_audio_device(&device);
+            } else if self.audio.is_none() {
+                match AudioHost::start(None) {
+                    Ok(host) => {
+                        self.midi = MidiSource::connect_all(Arc::clone(&host.telemetry));
+                        self.audio = Some(host);
+                        self.audio_error = None;
+                        self.audio_devices = AudioHost::devices();
+                    }
+                    Err(err) => self.audio_error = Some(err.to_string()),
                 }
             }
         }
@@ -301,6 +324,7 @@ mod tests {
             help_open: false,
             audio_devices: Vec::new(),
             last_midi_scan: Instant::now(),
+            last_audio_recovery: Instant::now(),
         };
         let ctx = egui::Context::default();
         let raw = egui::RawInput {
