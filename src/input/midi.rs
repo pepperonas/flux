@@ -191,6 +191,10 @@ impl MidiSource {
         self.messages.load(Ordering::Relaxed)
     }
 
+    pub fn feedback_outputs(&self) -> usize {
+        self.outputs.len()
+    }
+
     pub fn last_message(&self) -> Option<u64> {
         (self.messages() > 0).then(|| self.last_message.load(Ordering::Relaxed))
     }

@@ -23,6 +23,7 @@ notes started by loop playback.
 - Launchkey DAW output handshake, loop/transport pad feedback, and clean output
   release on shutdown.
 - MIDI clock output at 24 PPQN while transport is running.
+- Diagnostics reports the number of connected DAW feedback outputs.
 - Voice-steal velocity handover and parameter smoothing in the DSP path.
 - Correct note-off handling for chord-bound notes after modifier release.
 - Sample-offset loop playback: note events now enter the voice engine at their

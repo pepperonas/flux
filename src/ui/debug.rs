@@ -133,6 +133,10 @@ pub fn show(
         },
     );
     ui.small(format!("{} messages received", midi.messages()));
+    ui.small(format!(
+        "{} DAW feedback output(s)",
+        midi.feedback_outputs()
+    ));
     if let Some(message) = midi.last_message() {
         ui.small(format!("last message bytes: {message:016x}"));
     }
