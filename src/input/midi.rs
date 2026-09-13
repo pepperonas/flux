@@ -179,6 +179,27 @@ impl MidiSource {
                         title.extend_from_slice(b"FLUX");
                         title.push(0xF7);
                         let _ = connection.send(&title);
+                        for (field, label) in [
+                            "BRIGHT", "DARK", "WET", "DRY", "ENERGY", "CHAOS", "DENSITY", "SPACE",
+                        ]
+                        .into_iter()
+                        .enumerate()
+                        {
+                            let mut text = vec![
+                                0xF0,
+                                0x00,
+                                0x20,
+                                0x29,
+                                0x02,
+                                0x13,
+                                0x06,
+                                0x20,
+                                (field + 1) as u8,
+                            ];
+                            text.extend_from_slice(label.as_bytes());
+                            text.push(0xF7);
+                            let _ = connection.send(&text);
+                        }
                         log::info!("MIDI feedback connected: {name}");
                         outputs.push(connection);
                     }
