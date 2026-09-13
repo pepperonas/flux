@@ -94,7 +94,8 @@ changes. On shutdown FLUX releases drum-pad takeover and leaves DAW mode.
 OLED field indices and physical RGB rendering remain unverified. FLUX sends
 standardized RGB SysEx colors for the four loop pads when a DAW output exists.
 FLUX also emits MIDI clock (`F8`) at 24 pulses per quarter note while transport
-is running, based on the active sample rate and BPM.
+is running, based on the active sample rate and BPM. Transport transitions emit
+MIDI Start (`FA`) and Stop (`FC`); restarting resets the clock position.
 On DAW connection it configures the documented stationary OLED arrangement 3
 and writes the title `FLUX`; per-control OLED fields remain pending hardware
 verification.

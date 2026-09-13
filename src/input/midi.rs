@@ -75,6 +75,14 @@ pub fn pad_rgb_sysex(pad: u8, red: u8, green: u8, blue: u8) -> Vec<u8> {
     ]
 }
 
+fn transport_realtime(previous: Option<bool>, playing: bool) -> Option<u8> {
+    match previous {
+        Some(old) if old == playing => None,
+        _ if playing => Some(0xFA),
+        _ => Some(0xFC),
+    }
+}
+
 /// Owns open CoreMIDI/ALSA/WinMM connections. Keeping this value alive keeps
 /// each callback alive; disconnecting it on application shutdown releases the
 /// ports cleanly.
@@ -262,6 +270,7 @@ impl MidiSource {
         sample_rate: f32,
     ) {
         let state = (track_states, active_track, playing);
+        let previous_playing = self.last_feedback.map(|state| state.2);
         if self.last_feedback != Some(state) {
             self.last_feedback = Some(state);
             for connection in &mut self.outputs {
@@ -290,6 +299,9 @@ impl MidiSource {
                 }
                 let transport_note = if playing { 44 } else { 45 };
                 let _ = connection.send(&[0x9A, transport_note, 127]);
+                if let Some(message) = transport_realtime(previous_playing, playing) {
+                    let _ = connection.send(&[message]);
+                }
             }
         }
         if playing && bpm > 0.0 && sample_rate > 0.0 {
@@ -392,5 +404,13 @@ mod tests {
             pad_rgb_sysex(3, 255, 32, 7),
             vec![0xF0, 0x00, 0x20, 0x29, 0x02, 0x13, 0x01, 0x43, 3, 127, 32, 7, 0xF7]
         );
+    }
+
+    #[test]
+    fn transport_realtime_only_fires_on_state_changes() {
+        assert_eq!(transport_realtime(None, true), Some(0xFA));
+        assert_eq!(transport_realtime(Some(true), true), None);
+        assert_eq!(transport_realtime(Some(true), false), Some(0xFC));
+        assert_eq!(transport_realtime(Some(false), true), Some(0xFA));
     }
 }

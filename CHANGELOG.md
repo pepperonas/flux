@@ -23,6 +23,7 @@ notes started by loop playback.
 - Launchkey DAW output handshake, loop/transport pad feedback, and clean output
   release on shutdown.
 - MIDI clock output at 24 PPQN while transport is running.
+- MIDI Start/Stop realtime messages follow FLUX transport transitions.
 - Diagnostics reports the number of connected DAW feedback outputs.
 - DAW feedback initializes the documented stationary OLED layout and title.
 - Stationary OLED fields are initialized with the eight FLUX macro names.
