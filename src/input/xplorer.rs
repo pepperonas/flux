@@ -92,6 +92,9 @@ impl XplorerSource {
                         continue;
                     }
                     worker_state.store(CONNECTED, Ordering::Relaxed);
+                    worker_last_report.store(0, Ordering::Relaxed);
+                    worker_last_bytes.store(0, Ordering::Relaxed);
+                    worker_changed_mask.store(0, Ordering::Relaxed);
                     let mut report = [0u8; 32];
                     let mut previous_report = [0u8; 32];
                     let mut have_previous = false;
