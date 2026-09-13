@@ -91,7 +91,8 @@ When a MIDI output whose name contains `DAW` is available, FLUX sends the
 documented DAW-mode and drum-pad takeover messages on connect. Loop-track and
 transport state is then sent as channel-10 pad note messages, throttled to state
 changes. On shutdown FLUX releases drum-pad takeover and leaves DAW mode.
-OLED text, exact palette values, and full RGB SysEx feedback remain unverified.
+OLED field indices and physical RGB rendering remain unverified. FLUX sends
+standardized RGB SysEx colors for the four loop pads when a DAW output exists.
 FLUX also emits MIDI clock (`F8`) at 24 pulses per quarter note while transport
 is running, based on the active sample rate and BPM.
 On DAW connection it configures the documented stationary OLED arrangement 3

@@ -263,6 +263,18 @@ impl MidiSource {
                         64
                     };
                     let _ = connection.send(&[0x9A, 36 + track, velocity]);
+                    let (mut red, mut green, mut blue) = match code {
+                        1 => (255, 24, 24),
+                        2 => (24, 220, 96),
+                        3 => (255, 160, 24),
+                        _ => (0, 0, 0),
+                    };
+                    if track as usize != active_track && code != 0 {
+                        red /= 2;
+                        green /= 2;
+                        blue /= 2;
+                    }
+                    let _ = connection.send(&pad_rgb_sysex(track, red, green, blue));
                 }
                 let transport_note = if playing { 44 } else { 45 };
                 let _ = connection.send(&[0x9A, transport_note, 127]);
