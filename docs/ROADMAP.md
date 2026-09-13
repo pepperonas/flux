@@ -65,6 +65,8 @@ output on the grounds that nothing consumed it. The Launchkey Mini MK4 does —
 pads, screen and encoder positions are all output — so that decision is reversed.
 
 * `midir` input **and output**; device list in Settings
+  - Current: MIDI input, automatic port reconnect, and provisional Launchkey
+    encoder/pad input mappings. Output and protocol feedback remain open.
 * `ControlSurface` trait: connect / render / disconnect, with per-control rate
   limiting and a guaranteed clean disconnect, including on panic
 * **Launchkey Mini MK4 profile** — DAW-mode handshake, 16 RGB pads showing loop

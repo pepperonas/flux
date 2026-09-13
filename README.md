@@ -15,6 +15,12 @@ music software before.
 > [ROADMAP.md](docs/ROADMAP.md) and [CHANGELOG.md](CHANGELOG.md) for the exact
 > scope and remaining hardware work.
 
+Audio outputs can be refreshed and selected from Settings. MIDI ports are
+polled automatically and reconnect when devices are plugged in or removed;
+Diagnostics shows the current MIDI and Xplorer connection state. The Xplorer
+reader is reconnect-safe as well, while its control-byte mapping remains a
+hardware verification step.
+
 ---
 
 ## Why it exists
