@@ -55,6 +55,7 @@ pub struct FluxApp {
     help_open: bool,
     audio_devices: Vec<String>,
     last_midi_scan: Instant,
+    midi_startup_retries: u8,
     last_audio_recovery: Instant,
 }
 
@@ -85,6 +86,7 @@ impl FluxApp {
             help_open: false,
             audio_devices: AudioHost::devices(),
             last_midi_scan: Instant::now(),
+            midi_startup_retries: 5,
             last_audio_recovery: Instant::now(),
         }
     }
@@ -114,6 +116,7 @@ impl FluxApp {
             Ok(host) => {
                 let telemetry = Arc::clone(&host.telemetry);
                 self.midi = MidiSource::connect_all(telemetry);
+                self.midi_startup_retries = 5;
                 self.audio = Some(host);
                 self.audio_error = None;
                 self.audio_devices = AudioHost::devices();
@@ -153,7 +156,9 @@ impl eframe::App for FluxApp {
             );
             if self.last_midi_scan.elapsed() >= Duration::from_secs(1) {
                 self.last_midi_scan = Instant::now();
-                if self.midi.ports_changed() {
+                let retry_startup = self.midi_startup_retries > 0;
+                self.midi_startup_retries = self.midi_startup_retries.saturating_sub(1);
+                if retry_startup || self.midi.ports_changed() {
                     self.midi = MidiSource::connect_all(telemetry);
                 }
             }
@@ -171,6 +176,7 @@ impl eframe::App for FluxApp {
                 match AudioHost::start(None) {
                     Ok(host) => {
                         self.midi = MidiSource::connect_all(Arc::clone(&host.telemetry));
+                        self.midi_startup_retries = 5;
                         self.audio = Some(host);
                         self.audio_error = None;
                         self.audio_devices = AudioHost::devices();
@@ -331,6 +337,7 @@ mod tests {
             help_open: false,
             audio_devices: Vec::new(),
             last_midi_scan: Instant::now(),
+            midi_startup_retries: 0,
             last_audio_recovery: Instant::now(),
         };
         let ctx = egui::Context::default();

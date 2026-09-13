@@ -21,6 +21,9 @@ Diagnostics shows the current MIDI and Xplorer connection state. The Xplorer
 reader is reconnect-safe as well, while its control-byte mapping remains a
 hardware verification step.
 
+At startup FLUX retries MIDI discovery for five seconds, so already-connected
+controllers do not need to be unplugged and reinserted while CoreMIDI settles.
+
 The current package version is `0.1.0`; run `cargo run -- --version` to print
 it without opening the GUI.
 

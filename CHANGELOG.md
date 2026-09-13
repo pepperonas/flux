@@ -9,6 +9,9 @@ notes started by loop playback.
 
 Escape and the Performance PANIC button now stop all voices immediately.
 
+MIDI discovery retries automatically during the first five seconds, covering
+devices whose CoreMIDI ports become usable shortly after application startup.
+
 - Real-time synth engine with transport, recording click, and four-track event
   looper.
 - Performance, read-only patch, diagnostics, and settings views.
