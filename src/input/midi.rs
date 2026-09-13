@@ -57,6 +57,12 @@ fn pad_action(message: &[u8]) -> Option<Action> {
     Some(Action::LoopControl(command))
 }
 
+pub fn pad_rgb_sysex(pad: u8, red: u8, green: u8, blue: u8) -> Vec<u8> {
+    vec![
+        0xF0, 0x00, 0x20, 0x29, 0x02, 0x13, 0x01, 0x43, pad, red, green, blue, 0xF7,
+    ]
+}
+
 /// Owns open CoreMIDI/ALSA/WinMM connections. Keeping this value alive keeps
 /// each callback alive; disconnecting it on application shutdown releases the
 /// ports cleanly.
@@ -354,5 +360,13 @@ mod tests {
             Some(Action::Transport(crate::core::event::TransportCmd::Toggle))
         );
         assert_eq!(pad_action(&[0x99, 36, 0]), None);
+    }
+
+    #[test]
+    fn pad_rgb_sysex_uses_the_mini_mk4_product_id() {
+        assert_eq!(
+            pad_rgb_sysex(3, 255, 32, 7),
+            vec![0xF0, 0x00, 0x20, 0x29, 0x02, 0x13, 0x01, 0x43, 3, 255, 32, 7, 0xF7]
+        );
     }
 }

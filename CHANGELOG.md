@@ -26,6 +26,8 @@ notes started by loop playback.
 - Diagnostics reports the number of connected DAW feedback outputs.
 - DAW feedback initializes the documented stationary OLED layout and title.
 - Stationary OLED fields are initialized with the eight FLUX macro names.
+- Tested Mini-MK4 RGB pad SysEx message builder added for verified future LED
+  feedback.
 - Voice-steal velocity handover and parameter smoothing in the DSP path.
 - Correct note-off handling for chord-bound notes after modifier release.
 - Sample-offset loop playback: note events now enter the voice engine at their
