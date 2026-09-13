@@ -1,5 +1,7 @@
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::sync::Arc;
+use std::thread::{self, JoinHandle};
+use std::time::{Duration, Instant};
 
 use midir::{MidiInput, MidiInputConnection, MidiOutput, MidiOutputConnection};
 
@@ -85,6 +87,10 @@ fn transport_realtime(previous: Option<bool>, playing: bool) -> Option<u8> {
     }
 }
 
+fn midi_clock_period(bpm: f64) -> Duration {
+    Duration::from_secs_f64(60.0 / (bpm.max(1.0) * 24.0))
+}
+
 /// Owns open CoreMIDI/ALSA/WinMM connections. Keeping this value alive keeps
 /// each callback alive; disconnecting it on application shutdown releases the
 /// ports cleanly.
@@ -96,13 +102,81 @@ pub struct MidiSource {
     last_message: Arc<AtomicU64>,
     outputs: Vec<MidiOutputConnection>,
     last_feedback: Option<(u32, usize, bool)>,
-    next_clock_sample: u64,
+    clock: Option<MidiClock>,
 }
 
 struct MidiRuntime {
     telemetry: Arc<Telemetry>,
     messages: Arc<AtomicU64>,
     last_message: Arc<AtomicU64>,
+}
+
+struct MidiClock {
+    running: Arc<AtomicBool>,
+    playing: Arc<AtomicBool>,
+    bpm_milli: Arc<AtomicU32>,
+    worker: Option<JoinHandle<()>>,
+}
+
+impl MidiClock {
+    fn start(mut connection: MidiOutputConnection) -> Self {
+        let running = Arc::new(AtomicBool::new(true));
+        let playing = Arc::new(AtomicBool::new(false));
+        let bpm_milli = Arc::new(AtomicU32::new(120_000));
+        let worker_running = Arc::clone(&running);
+        let worker_playing = Arc::clone(&playing);
+        let worker_bpm = Arc::clone(&bpm_milli);
+        let worker = thread::Builder::new()
+            .name("flux-midi-clock".into())
+            .spawn(move || {
+                let mut previous = None;
+                let mut next_tick = Instant::now();
+                while worker_running.load(Ordering::Relaxed) {
+                    let is_playing = worker_playing.load(Ordering::Relaxed);
+                    if let Some(message) = transport_realtime(previous, is_playing) {
+                        let _ = connection.send(&[message]);
+                        next_tick = Instant::now();
+                    }
+                    previous = Some(is_playing);
+                    if is_playing {
+                        let bpm = worker_bpm.load(Ordering::Relaxed).max(1) as f64 / 1000.0;
+                        let period = midi_clock_period(bpm);
+                        let now = Instant::now();
+                        if now >= next_tick {
+                            let _ = connection.send(&[0xF8]);
+                            next_tick += period;
+                            if next_tick < now {
+                                next_tick = now + period;
+                            }
+                        }
+                    }
+                    thread::sleep(Duration::from_micros(500));
+                }
+                if previous == Some(true) {
+                    let _ = connection.send(&[0xFC]);
+                }
+            })
+            .ok();
+        Self {
+            running,
+            playing,
+            bpm_milli,
+            worker,
+        }
+    }
+
+    fn update(&self, playing: bool, bpm: f32) {
+        self.playing.store(playing, Ordering::Relaxed);
+        self.bpm_milli
+            .store((bpm.clamp(1.0, 999.0) * 1000.0) as u32, Ordering::Relaxed);
+    }
+
+    fn stop(&mut self) {
+        self.running.store(false, Ordering::Relaxed);
+        if let Some(worker) = self.worker.take() {
+            let _ = worker.join();
+        }
+    }
 }
 
 impl MidiSource {
@@ -182,6 +256,7 @@ impl MidiSource {
             }
         }
         let mut outputs = Vec::new();
+        let mut daw_output_names = Vec::new();
         if let Ok(discovery) = MidiOutput::new("FLUX Launchkey feedback") {
             for port in discovery.ports() {
                 let Ok(name) = discovery.port_name(&port) else {
@@ -190,6 +265,7 @@ impl MidiSource {
                 if !name.to_ascii_lowercase().contains("daw") {
                     continue;
                 }
+                daw_output_names.push(name.clone());
                 let Ok(output) = MidiOutput::new("FLUX Launchkey feedback") else {
                     continue;
                 };
@@ -235,6 +311,17 @@ impl MidiSource {
                 }
             }
         }
+        let clock = daw_output_names.first().and_then(|wanted| {
+            let output = MidiOutput::new("FLUX MIDI clock").ok()?;
+            let port = output
+                .ports()
+                .into_iter()
+                .find(|port| output.port_name(port).ok().as_deref() == Some(wanted.as_str()))?;
+            output
+                .connect(&port, "FLUX clock")
+                .ok()
+                .map(MidiClock::start)
+        });
         MidiSource {
             _connections: connections,
             ports: connected,
@@ -242,7 +329,7 @@ impl MidiSource {
             last_message,
             outputs,
             last_feedback: None,
-            next_clock_sample: 0,
+            clock,
         }
     }
 
@@ -267,12 +354,9 @@ impl MidiSource {
         track_states: u32,
         active_track: usize,
         playing: bool,
-        sample_pos: u64,
         bpm: f32,
-        sample_rate: f32,
     ) {
         let state = (track_states, active_track, playing);
-        let previous_playing = self.last_feedback.map(|state| state.2);
         if self.last_feedback != Some(state) {
             self.last_feedback = Some(state);
             for connection in &mut self.outputs {
@@ -301,34 +385,19 @@ impl MidiSource {
                 }
                 let transport_note = if playing { 44 } else { 45 };
                 let _ = connection.send(&[0x9A, transport_note, 127]);
-                if let Some(message) = transport_realtime(previous_playing, playing) {
-                    let _ = connection.send(&[message]);
-                }
             }
         }
-        if playing && bpm > 0.0 && sample_rate > 0.0 {
-            let samples_per_clock = (sample_rate as f64 * 60.0 / (bpm as f64 * 24.0))
-                .round()
-                .max(1.0) as u64;
-            if self.next_clock_sample == 0 {
-                self.next_clock_sample = sample_pos;
-            }
-            let mut sent = 0;
-            while sample_pos >= self.next_clock_sample && sent < 8 {
-                for connection in &mut self.outputs {
-                    let _ = connection.send(&[0xF8]);
-                }
-                self.next_clock_sample = self.next_clock_sample.saturating_add(samples_per_clock);
-                sent += 1;
-            }
-        } else {
-            self.next_clock_sample = 0;
+        if let Some(clock) = &self.clock {
+            clock.update(playing, bpm);
         }
     }
 }
 
 impl Drop for MidiSource {
     fn drop(&mut self) {
+        if let Some(clock) = &mut self.clock {
+            clock.stop();
+        }
         for connection in &mut self.outputs {
             let _ = connection.send(&[0xB6, 0x54, 0x00]);
             let _ = connection.send(&[0x9F, 0x0C, 0x00]);
@@ -414,5 +483,11 @@ mod tests {
         assert_eq!(transport_realtime(Some(true), true), None);
         assert_eq!(transport_realtime(Some(true), false), Some(0xFC));
         assert_eq!(transport_realtime(Some(false), true), Some(0xFB));
+    }
+
+    #[test]
+    fn midi_clock_period_is_24_ppqn() {
+        let period = midi_clock_period(120.0).as_secs_f64();
+        assert!((period - 1.0 / 48.0).abs() < 1e-9);
     }
 }

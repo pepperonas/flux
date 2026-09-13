@@ -24,6 +24,7 @@ notes started by loop playback.
   release on shutdown.
 - MIDI clock output at 24 PPQN while transport is running.
 - MIDI Start/Stop/Continue realtime messages follow FLUX transport transitions.
+- MIDI clock emission moved from GUI updates to a dedicated timing thread.
 - Diagnostics reports the number of connected DAW feedback outputs.
 - DAW feedback initializes the documented stationary OLED layout and title.
 - Stationary OLED fields are initialized with the eight FLUX macro names.
