@@ -68,6 +68,7 @@ pub struct MidiSource {
     last_message: Arc<AtomicU64>,
     outputs: Vec<MidiOutputConnection>,
     last_feedback: Option<(u32, usize, bool)>,
+    next_clock_sample: u64,
 }
 
 struct MidiRuntime {
@@ -182,6 +183,7 @@ impl MidiSource {
             last_message,
             outputs,
             last_feedback: None,
+            next_clock_sample: 0,
         }
     }
 
@@ -197,26 +199,51 @@ impl MidiSource {
         Self::visible_ports().is_some_and(|ports| ports != self.ports)
     }
 
-    pub fn render_feedback(&mut self, track_states: u32, active_track: usize, playing: bool) {
+    pub fn render_feedback(
+        &mut self,
+        track_states: u32,
+        active_track: usize,
+        playing: bool,
+        sample_pos: u64,
+        bpm: f32,
+        sample_rate: f32,
+    ) {
         let state = (track_states, active_track, playing);
-        if self.last_feedback == Some(state) {
-            return;
-        }
-        self.last_feedback = Some(state);
-        for connection in &mut self.outputs {
-            for track in 0..4u8 {
-                let code = ((track_states >> (track * 2)) & 0b11) as u8;
-                let velocity = if code == 0 {
-                    0
-                } else if track as usize == active_track {
-                    127
-                } else {
-                    64
-                };
-                let _ = connection.send(&[0x9A, 36 + track, velocity]);
+        if self.last_feedback != Some(state) {
+            self.last_feedback = Some(state);
+            for connection in &mut self.outputs {
+                for track in 0..4u8 {
+                    let code = ((track_states >> (track * 2)) & 0b11) as u8;
+                    let velocity = if code == 0 {
+                        0
+                    } else if track as usize == active_track {
+                        127
+                    } else {
+                        64
+                    };
+                    let _ = connection.send(&[0x9A, 36 + track, velocity]);
+                }
+                let transport_note = if playing { 44 } else { 45 };
+                let _ = connection.send(&[0x9A, transport_note, 127]);
             }
-            let transport_note = if playing { 44 } else { 45 };
-            let _ = connection.send(&[0x9A, transport_note, 127]);
+        }
+        if playing && bpm > 0.0 && sample_rate > 0.0 {
+            let samples_per_clock = (sample_rate as f64 * 60.0 / (bpm as f64 * 24.0))
+                .round()
+                .max(1.0) as u64;
+            if self.next_clock_sample == 0 {
+                self.next_clock_sample = sample_pos;
+            }
+            let mut sent = 0;
+            while sample_pos >= self.next_clock_sample && sent < 8 {
+                for connection in &mut self.outputs {
+                    let _ = connection.send(&[0xF8]);
+                }
+                self.next_clock_sample = self.next_clock_sample.saturating_add(samples_per_clock);
+                sent += 1;
+            }
+        } else {
+            self.next_clock_sample = 0;
         }
     }
 }

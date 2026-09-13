@@ -92,6 +92,8 @@ documented DAW-mode and drum-pad takeover messages on connect. Loop-track and
 transport state is then sent as channel-10 pad note messages, throttled to state
 changes. On shutdown FLUX releases drum-pad takeover and leaves DAW mode.
 OLED text, exact palette values, and full RGB SysEx feedback remain unverified.
+FLUX also emits MIDI clock (`F8`) at 24 pulses per quarter note while transport
+is running, based on the active sample rate and BPM.
 
 📄 Absolute CC on channel 16 in Plugin/Mixer/Sends modes; **relative** output in
 Transport mode with pivot `40h` — `41h` is one step clockwise, `3Fh` one step

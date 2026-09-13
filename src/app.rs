@@ -149,6 +149,9 @@ impl eframe::App for FluxApp {
                 telemetry.track_states(),
                 telemetry.active_track(),
                 telemetry.playing(),
+                telemetry.sample_pos(),
+                telemetry.bpm(),
+                self.audio.as_ref().map_or(48_000.0, |h| h.sample_rate),
             );
             if self.last_midi_scan.elapsed() >= Duration::from_secs(1) {
                 self.last_midi_scan = Instant::now();
