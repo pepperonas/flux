@@ -78,8 +78,10 @@ pub fn pad_rgb_sysex(pad: u8, red: u8, green: u8, blue: u8) -> Vec<u8> {
 fn transport_realtime(previous: Option<bool>, playing: bool) -> Option<u8> {
     match previous {
         Some(old) if old == playing => None,
-        _ if playing => Some(0xFA),
-        _ => Some(0xFC),
+        None if playing => Some(0xFA),
+        Some(false) if playing => Some(0xFB),
+        _ if !playing => Some(0xFC),
+        _ => None,
     }
 }
 
@@ -411,6 +413,6 @@ mod tests {
         assert_eq!(transport_realtime(None, true), Some(0xFA));
         assert_eq!(transport_realtime(Some(true), true), None);
         assert_eq!(transport_realtime(Some(true), false), Some(0xFC));
-        assert_eq!(transport_realtime(Some(false), true), Some(0xFA));
+        assert_eq!(transport_realtime(Some(false), true), Some(0xFB));
     }
 }
