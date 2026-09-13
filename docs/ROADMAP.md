@@ -81,9 +81,8 @@ pads, screen and encoder positions are all output — so that decision is revers
 * Mapping UI: what is bound to what, change it, remove it
 * **Learn mode**: press Learn → move any control (key, CC, pad, later a fret) →
   FLUX names it → pick a target → save. One implementation covers every source,
-  because they all speak `ControlId`. This is the point at which a player can
-  first build a **chord bound to a note**, which `resolve` does not release
-  cleanly — see the limitation recorded in `input::mapping::resolve`
+  because they all speak `ControlId`. Chord-bound notes already remember their
+  concrete note and release correctly after their modifier is lifted.
 * Full macro set: BRIGHT · DARK · WET · DRY · ENERGY · CHAOS · DENSITY · SPACE,
   unipolar or bipolar
 * Mappings, macro assignments and device profiles persist to disk

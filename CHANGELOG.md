@@ -13,6 +13,7 @@
   indicators in Diagnostics.
 - Automatic audio-stream recovery with a visible running/recovering indicator.
 - Voice-steal velocity handover and parameter smoothing in the DSP path.
+- Correct note-off handling for chord-bound notes after modifier release.
 
 The Xplorer control mapping and Launchkey protocol details remain hardware
 verification tasks for M2/M3.

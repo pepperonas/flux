@@ -128,6 +128,10 @@ impl HeldSet {
     fn take_note(&mut self, id: ControlId, semitone: i8) -> Option<u8> {
         self.notes.remove(&(id, semitone))
     }
+
+    fn has_note(&self, id: ControlId, semitone: i8) -> bool {
+        self.notes.contains_key(&(id, semitone))
+    }
 }
 
 /// Performance state that turns a relative binding into a concrete note.
@@ -165,23 +169,25 @@ pub fn resolve(
     // A chord takes precedence over the plain binding of the same control.
     // Without this, pressing a modified combination would fire both meanings.
     //
-    // KNOWN LIMITATION, not reachable in M1a. A chord bound to `Binding::Note`
-    // leaks. The press comes through here and records the note it started in
-    // `held`; the release never does, because this branch only runs on a press
-    // and a release therefore falls through to the plain binding of the
-    // trigger control. The started note gets no note-off - a stuck note, in an
-    // instrument with no panic action - and its entry in `held.notes` is never
-    // reclaimed, so the map grows for as long as the session runs.
-    //
-    // Nothing builds such a mapping today: `default_mapping` has no chords at
-    // all, and `add_chord` has no caller outside tests. M2's learn mode lets a
-    // player make one, so it has to be settled before that ships. It is not a
-    // symmetrical fix: by the time the trigger is released the modifier may
-    // already have been let go, so the chord that fired can no longer be
-    // recognised from `held` and would have to be remembered from the press.
     if event.value.is_press() {
         for (chord, binding) in &mapping.chords {
             if chord.trigger == event.id && chord.held.iter().all(|id| held.contains(id)) {
+                let mut out = Vec::new();
+                emit(binding, play, event, &mut out, held);
+                return out;
+            }
+        }
+    }
+
+    // A chord-bound note remembers the concrete note under its trigger and
+    // semitone. That memory, rather than the current modifier state, identifies
+    // the matching release: the modifier may already have been released.
+    if matches!(event.value, ControlValue::Gate(false)) {
+        for (chord, binding) in &mapping.chords {
+            let Binding::Note { semitone } = *binding else {
+                continue;
+            };
+            if chord.trigger == event.id && held.has_note(event.id, semitone) {
                 let mut out = Vec::new();
                 emit(binding, play, event, &mut out, held);
                 return out;
@@ -578,6 +584,44 @@ mod tests {
             &ev(trigger, ControlValue::Gate(false))
         )
         .is_empty());
+    }
+
+    #[test]
+    fn a_chord_note_releases_even_after_its_modifier() {
+        let mut m = Mapping::default();
+        let modifier = ControlId::Keyboard(KeyCode::A);
+        let trigger = ControlId::Keyboard(KeyCode::C);
+        m.add_chord(
+            InputChord {
+                held: vec![modifier],
+                trigger,
+            },
+            Binding::Note { semitone: 7 },
+        );
+        let mut held = HeldSet::default();
+        held.press(modifier);
+        assert_eq!(
+            resolve(
+                &m,
+                &mut held,
+                &play(),
+                &ev(trigger, ControlValue::Gate(true))
+            ),
+            vec![Action::NoteOn {
+                note: 67,
+                velocity: 0.8
+            }]
+        );
+        held.release(modifier);
+        assert_eq!(
+            resolve(
+                &m,
+                &mut held,
+                &play(),
+                &ev(trigger, ControlValue::Gate(false))
+            ),
+            vec![Action::NoteOff { note: 67 }]
+        );
     }
 
     #[test]
