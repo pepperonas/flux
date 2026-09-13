@@ -12,6 +12,7 @@
 - Automatic MIDI port change detection and visible MIDI/Xplorer connection
   indicators in Diagnostics.
 - Automatic audio-stream recovery with a visible running/recovering indicator.
+- MIDI discovery errors no longer tear down healthy existing connections.
 - Voice-steal velocity handover and parameter smoothing in the DSP path.
 - Correct note-off handling for chord-bound notes after modifier release.
 - Sample-offset loop playback: note events now enter the voice engine at their
