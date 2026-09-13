@@ -50,6 +50,7 @@ pub enum KeyCode {
     Plus,
     Slash,
     Backslash,
+    Escape,
 }
 
 #[derive(Clone, Copy, PartialEq, Debug)]
@@ -156,6 +157,7 @@ pub enum Action {
     LoopControl(LoopCmd),
     OctaveShift(i8),
     VelocityShift(f32),
+    Panic,
 }
 
 #[cfg(test)]

@@ -68,6 +68,12 @@ pub fn show(
             bpm
         ));
         if let Some(telemetry) = telemetry {
+            if ui
+                .button(egui::RichText::new("PANIC").color(theme::DANGER))
+                .clicked()
+            {
+                telemetry.push_command(AudioCommand::Act(Action::Panic));
+            }
             if ui.small_button("−").clicked() {
                 telemetry.push_command(AudioCommand::Act(Action::Transport(TransportCmd::SetBpm(
                     (bpm - 1.0).max(20.0),
@@ -176,7 +182,7 @@ pub fn show(
     ui.painter().rect_filled(filled, theme::R_SM, colour);
 
     ui.add_space(20.0);
-    ui.small("R record  , clear  . undo  - mute  1–4 select track  SPACE play/stop");
+    ui.small("R record  , clear  . undo  - mute  1–4 select track  SPACE play/stop  ESC panic");
     ui.small("A W S E D F T G Y H U J K play  ·  Z/X octave  ·  C/V velocity");
 }
 

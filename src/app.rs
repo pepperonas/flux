@@ -258,6 +258,7 @@ impl eframe::App for FluxApp {
                     ui.label("Z / X  octave down / up");
                     ui.label("C / V  velocity down / up");
                     ui.label("SPACE  play / stop");
+                    ui.label("ESC  panic / stop all voices immediately");
                     ui.label("R  record   ,  clear   .  undo   -  mute");
                     ui.label("1–4  select loop track");
                     ui.separator();

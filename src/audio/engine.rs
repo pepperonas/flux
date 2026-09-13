@@ -269,6 +269,7 @@ impl AudioEngine {
                         self.transport.samples_per_bar(),
                     ),
                     Action::OctaveShift(_) | Action::VelocityShift(_) => {}
+                    Action::Panic => self.voices.panic(),
                 },
             }
         }
@@ -457,6 +458,21 @@ mod tests {
         e.render(256);
         let peak = e.output()[..256].iter().fold(0.0f32, |a, b| a.max(b.abs()));
         assert!(peak > 0.001, "the engine stayed silent, peak {peak}");
+    }
+
+    #[test]
+    fn panic_stops_every_voice_immediately() {
+        let mut e = engine();
+        e.telemetry.push_command(AudioCommand::Act(Action::NoteOn {
+            note: 60,
+            velocity: 1.0,
+        }));
+        e.render(256);
+        assert!(e.telemetry.active_voices() > 0);
+        e.telemetry.push_command(AudioCommand::Act(Action::Panic));
+        e.render(1);
+        assert_eq!(e.telemetry.active_voices(), 0);
+        assert_eq!(e.telemetry.active_notes(), 0);
     }
 
     #[test]

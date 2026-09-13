@@ -24,6 +24,8 @@ hardware verification step.
 The current package version is `0.1.0`; run `cargo run -- --version` to print
 it without opening the GUI.
 
+Press `Esc` or use the red PANIC button to stop every voice immediately.
+
 ---
 
 ## Why it exists

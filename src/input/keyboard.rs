@@ -54,6 +54,7 @@ pub fn from_egui(key: egui::Key) -> Option<KeyCode> {
         E::Plus => KeyCode::Plus,
         E::Slash => KeyCode::Slash,
         E::Backslash => KeyCode::Backslash,
+        E::Escape => KeyCode::Escape,
         _ => return None,
     })
 }
@@ -101,6 +102,10 @@ pub fn default_mapping() -> Mapping {
     m.insert(
         ControlId::Keyboard(KeyCode::Space),
         Binding::Act(Action::Transport(TransportCmd::Toggle)),
+    );
+    m.insert(
+        ControlId::Keyboard(KeyCode::Escape),
+        Binding::Act(Action::Panic),
     );
     m.insert(
         ControlId::Keyboard(KeyCode::R),

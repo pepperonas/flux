@@ -214,6 +214,14 @@ impl Default for VoicePool {
 }
 
 impl VoicePool {
+    pub fn panic(&mut self) {
+        for voice in &mut self.voices {
+            *voice = Voice::default();
+        }
+        self.scale.snap(1.0);
+        self.sounded = false;
+    }
+
     pub fn all_notes_off(&mut self) {
         for voice in &mut self.voices {
             if voice.note.is_some() {
