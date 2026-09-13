@@ -169,6 +169,16 @@ impl MidiSource {
                     Ok(mut connection) => {
                         let _ = connection.send(&[0x9F, 0x0C, 0x7F]);
                         let _ = connection.send(&[0xB6, 0x54, 0x01]);
+                        // Stationary display, arrangement 3 (title + 2×4
+                        // labels), followed by a short title. The remaining
+                        // per-control fields are left untouched until their
+                        // exact MK4 indices are verified on hardware.
+                        let _ = connection
+                            .send(&[0xF0, 0x00, 0x20, 0x29, 0x02, 0x13, 0x04, 0x20, 0x03, 0xF7]);
+                        let mut title = vec![0xF0, 0x00, 0x20, 0x29, 0x02, 0x13, 0x06, 0x20, 0x00];
+                        title.extend_from_slice(b"FLUX");
+                        title.push(0xF7);
+                        let _ = connection.send(&title);
                         log::info!("MIDI feedback connected: {name}");
                         outputs.push(connection);
                     }
