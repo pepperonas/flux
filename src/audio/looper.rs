@@ -184,7 +184,7 @@ impl EventLooper {
         track.insert(LoopEvent { pos: p, action });
     }
 
-    pub fn events_in_block(&self, pos: u64, frames: usize) -> [Option<Action>; 64] {
+    pub fn events_in_block(&self, pos: u64, frames: usize) -> [Option<(usize, Action)>; 64] {
         let mut out = [None; 64];
         if self.loop_len == 0 {
             return out;
@@ -196,13 +196,24 @@ impl EventLooper {
         for track in &self.tracks {
             if matches!(track.state, TrackState::Playing) {
                 for event in track.events[..track.len].iter().flatten() {
+                    let offset = if event.pos >= p {
+                        event.pos - p
+                    } else {
+                        self.loop_len - p + event.pos
+                    };
                     let in_range = if end < self.loop_len {
                         event.pos >= p && event.pos < end
                     } else {
                         event.pos >= p || event.pos < wrapped_end
                     };
                     if in_range && out_len < out.len() {
-                        out[out_len] = Some(event.action);
+                        let item = (offset as usize, event.action);
+                        let mut at = out_len;
+                        while at > 0 && out[at - 1].expect("occupied").0 > item.0 {
+                            out[at] = out[at - 1];
+                            at -= 1;
+                        }
+                        out[at] = Some(item);
                         out_len += 1;
                     }
                 }
@@ -241,10 +252,13 @@ mod tests {
         l.loop_len = 96_000;
         assert_eq!(
             l.events_in_block(0, 256)[0],
-            Some(Action::NoteOn {
-                note: 60,
-                velocity: 1.0
-            })
+            Some((
+                0,
+                Action::NoteOn {
+                    note: 60,
+                    velocity: 1.0
+                }
+            ))
         );
     }
 
@@ -308,10 +322,13 @@ mod tests {
         assert_eq!(l.events_in_block(0, 256)[0], None);
         assert_eq!(
             l.events_in_block(96_000, 256)[0],
-            Some(Action::NoteOn {
-                note: 64,
-                velocity: 1.0
-            })
+            Some((
+                0,
+                Action::NoteOn {
+                    note: 64,
+                    velocity: 1.0
+                }
+            ))
         );
     }
 
@@ -356,10 +373,28 @@ mod tests {
         assert_eq!(l.loop_len, 48_000);
         assert_eq!(
             l.events_in_block(12_000, 1)[0],
-            Some(Action::NoteOn {
-                note: 60,
-                velocity: 1.0
-            })
+            Some((
+                0,
+                Action::NoteOn {
+                    note: 60,
+                    velocity: 1.0
+                }
+            ))
+        );
+    }
+
+    #[test]
+    fn replay_reports_the_sample_offset_inside_the_block() {
+        let mut l = EventLooper {
+            loop_len: 1_000,
+            ..EventLooper::default()
+        };
+        l.handle(LoopCmd::ToggleRecord, 0, 100.0, 400.0);
+        l.record(Action::NoteOff { note: 60 }, 950, 100.0);
+        l.handle(LoopCmd::ToggleRecord, 1_000, 100.0, 400.0);
+        assert_eq!(
+            l.events_in_block(900, 100)[0],
+            Some((50, Action::NoteOff { note: 60 }))
         );
     }
 }

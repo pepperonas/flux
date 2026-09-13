@@ -24,6 +24,10 @@ Audio stream failures are published to the interface and retried once per
 second. A failed preferred output may fall back to the system default rather
 than leaving the application silent.
 
+Event-loop playback now carries sample offsets through the block and renders
+voice segments around them, so recorded notes no longer collapse onto the
+start of the callback buffer.
+
 **Goal: press a key, hear a synth, record a loop that stays in time.**
 This is the brief's §39 definition of done, built on the Phase-2 architecture
 rather than on something that would need replacing.

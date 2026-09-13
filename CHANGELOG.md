@@ -14,6 +14,8 @@
 - Automatic audio-stream recovery with a visible running/recovering indicator.
 - Voice-steal velocity handover and parameter smoothing in the DSP path.
 - Correct note-off handling for chord-bound notes after modifier release.
+- Sample-offset loop playback: note events now enter the voice engine at their
+  exact position inside each audio block, including loop wrap-around.
 
 The Xplorer control mapping and Launchkey protocol details remain hardware
 verification tasks for M2/M3.

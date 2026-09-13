@@ -274,22 +274,12 @@ impl AudioEngine {
     pub fn render(&mut self, frames: usize) {
         let frames = frames.min(self.out.len());
         self.drain_commands();
-        if self.transport.playing && self.looper.loop_len > 0 {
-            for action in self
-                .looper
+        let loop_events = if self.transport.playing && self.looper.loop_len > 0 {
+            self.looper
                 .events_in_block(self.transport.sample_pos, frames)
-                .into_iter()
-                .flatten()
-            {
-                match action {
-                    Action::NoteOn { note, velocity } => {
-                        self.voices.note_on(note, velocity, self.sample_rate);
-                    }
-                    Action::NoteOff { note } => self.voices.note_off(note),
-                    _ => {}
-                }
-            }
-        }
+        } else {
+            [None; 64]
+        };
         self.params.recompute();
 
         let mut values = ParamValues::default();
@@ -299,8 +289,32 @@ impl AudioEngine {
         }
 
         self.voice_bus[..frames].fill(0.0);
-        self.voices
-            .render(&mut self.voice_bus[..frames], &values, self.sample_rate);
+        let mut cursor = 0;
+        for (offset, action) in loop_events.into_iter().flatten() {
+            let offset = offset.min(frames);
+            if offset > cursor {
+                self.voices.render(
+                    &mut self.voice_bus[cursor..offset],
+                    &values,
+                    self.sample_rate,
+                );
+                cursor = offset;
+            }
+            match action {
+                Action::NoteOn { note, velocity } => {
+                    self.voices.note_on(note, velocity, self.sample_rate);
+                }
+                Action::NoteOff { note } => self.voices.note_off(note),
+                _ => {}
+            }
+        }
+        if cursor < frames {
+            self.voices.render(
+                &mut self.voice_bus[cursor..frames],
+                &values,
+                self.sample_rate,
+            );
+        }
 
         // Give recording a short timing reference without adding a permanent
         // sound source to the instrument. The click starts at the first beat
@@ -452,6 +466,38 @@ mod tests {
         e.render(256);
         let peak = e.output()[..256].iter().fold(0.0f32, |a, b| a.max(b.abs()));
         assert!(peak > 0.001, "recording click stayed silent, peak {peak}");
+    }
+
+    #[test]
+    fn loop_note_starts_at_its_sample_offset() {
+        let mut e = engine();
+        e.looper.grid = crate::core::quantize::Grid::Off;
+        e.looper.loop_len = 1_024;
+        e.looper.handle(
+            crate::core::event::LoopCmd::ToggleRecord,
+            0,
+            24_000.0,
+            96_000.0,
+        );
+        e.looper.record(
+            Action::NoteOn {
+                note: 60,
+                velocity: 1.0,
+            },
+            128,
+            24_000.0,
+        );
+        e.looper.handle(
+            crate::core::event::LoopCmd::ToggleRecord,
+            1_024,
+            24_000.0,
+            96_000.0,
+        );
+        e.render(256);
+        assert!(e.output()[..128].iter().all(|sample| *sample == 0.0));
+        assert!(e.output()[128..256]
+            .iter()
+            .any(|sample| sample.abs() > 0.001));
     }
 
     #[test]
