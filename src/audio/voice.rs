@@ -214,6 +214,14 @@ impl Default for VoicePool {
 }
 
 impl VoicePool {
+    pub fn all_notes_off(&mut self) {
+        for voice in &mut self.voices {
+            if voice.note.is_some() {
+                voice.release();
+            }
+        }
+    }
+
     /// Starts `note`. Returns the note of a voice that was stolen to make
     /// room, if stealing was necessary, so the caller can report it.
     pub fn note_on(&mut self, note: u8, velocity: f32, sample_rate: f32) -> Option<u8> {

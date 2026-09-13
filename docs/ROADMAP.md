@@ -28,6 +28,9 @@ Event-loop playback now carries sample offsets through the block and renders
 voice segments around them, so recorded notes no longer collapse onto the
 start of the callback buffer.
 
+Transport Stop releases all active voices so stopping a performance also
+stops loop-triggered notes cleanly.
+
 **Goal: press a key, hear a synth, record a loop that stays in time.**
 This is the brief's §39 definition of done, built on the Phase-2 architecture
 rather than on something that would need replacing.

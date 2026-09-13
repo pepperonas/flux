@@ -4,6 +4,9 @@
 
 The binary reports this version with `--version` / `-V`.
 
+Transport Stop now sends all active voices into their release phase, including
+notes started by loop playback.
+
 - Real-time synth engine with transport, recording click, and four-track event
   looper.
 - Performance, read-only patch, diagnostics, and settings views.

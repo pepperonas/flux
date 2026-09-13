@@ -250,7 +250,10 @@ impl AudioEngine {
                     // thread; they never reach the audio thread in M1a.
                     Action::Transport(cmd) => match cmd {
                         TransportCmd::Play => self.transport.playing = true,
-                        TransportCmd::Stop => self.transport.playing = false,
+                        TransportCmd::Stop => {
+                            self.transport.playing = false;
+                            self.voices.all_notes_off();
+                        }
                         TransportCmd::Toggle => self.transport.playing = !self.transport.playing,
                         TransportCmd::SetBpm(bpm) => {
                             let old_spb = self.transport.samples_per_beat();
