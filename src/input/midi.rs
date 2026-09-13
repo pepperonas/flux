@@ -1,7 +1,7 @@
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 
-use midir::{MidiInput, MidiInputConnection};
+use midir::{MidiInput, MidiInputConnection, MidiOutput, MidiOutputConnection};
 
 use crate::core::event::{Action, LoopCmd};
 use crate::core::ids::MacroId;
@@ -66,6 +66,8 @@ pub struct MidiSource {
     pub ports: Vec<String>,
     messages: Arc<AtomicU64>,
     last_message: Arc<AtomicU64>,
+    outputs: Vec<MidiOutputConnection>,
+    last_feedback: Option<(u32, usize, bool)>,
 }
 
 struct MidiRuntime {
@@ -150,11 +152,36 @@ impl MidiSource {
                 Err(err) => log::warn!("could not connect MIDI input {name}: {err}"),
             }
         }
+        let mut outputs = Vec::new();
+        if let Ok(discovery) = MidiOutput::new("FLUX Launchkey feedback") {
+            for port in discovery.ports() {
+                let Ok(name) = discovery.port_name(&port) else {
+                    continue;
+                };
+                if !name.to_ascii_lowercase().contains("daw") {
+                    continue;
+                }
+                let Ok(output) = MidiOutput::new("FLUX Launchkey feedback") else {
+                    continue;
+                };
+                match output.connect(&port, "FLUX Launchkey DAW") {
+                    Ok(mut connection) => {
+                        let _ = connection.send(&[0x9F, 0x0C, 0x7F]);
+                        let _ = connection.send(&[0xB6, 0x54, 0x01]);
+                        log::info!("MIDI feedback connected: {name}");
+                        outputs.push(connection);
+                    }
+                    Err(err) => log::warn!("could not connect MIDI output {name}: {err}"),
+                }
+            }
+        }
         MidiSource {
             _connections: connections,
             ports: connected,
             messages,
             last_message,
+            outputs,
+            last_feedback: None,
         }
     }
 
@@ -168,6 +195,38 @@ impl MidiSource {
 
     pub fn ports_changed(&self) -> bool {
         Self::visible_ports().is_some_and(|ports| ports != self.ports)
+    }
+
+    pub fn render_feedback(&mut self, track_states: u32, active_track: usize, playing: bool) {
+        let state = (track_states, active_track, playing);
+        if self.last_feedback == Some(state) {
+            return;
+        }
+        self.last_feedback = Some(state);
+        for connection in &mut self.outputs {
+            for track in 0..4u8 {
+                let code = ((track_states >> (track * 2)) & 0b11) as u8;
+                let velocity = if code == 0 {
+                    0
+                } else if track as usize == active_track {
+                    127
+                } else {
+                    64
+                };
+                let _ = connection.send(&[0x9A, 36 + track, velocity]);
+            }
+            let transport_note = if playing { 44 } else { 45 };
+            let _ = connection.send(&[0x9A, transport_note, 127]);
+        }
+    }
+}
+
+impl Drop for MidiSource {
+    fn drop(&mut self) {
+        for connection in &mut self.outputs {
+            let _ = connection.send(&[0xB6, 0x54, 0x00]);
+            let _ = connection.send(&[0x9F, 0x0C, 0x00]);
+        }
     }
 }
 

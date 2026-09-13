@@ -145,6 +145,11 @@ impl eframe::App for FluxApp {
         let telemetry = self.audio.as_ref().map(|h| Arc::clone(&h.telemetry));
         if let Some(telemetry) = telemetry {
             self.service_audio(ctx, &telemetry);
+            self.midi.render_feedback(
+                telemetry.track_states(),
+                telemetry.active_track(),
+                telemetry.playing(),
+            );
             if self.last_midi_scan.elapsed() >= Duration::from_secs(1) {
                 self.last_midi_scan = Instant::now();
                 if self.midi.ports_changed() {

@@ -87,6 +87,12 @@ notes 36–39 select loop tracks 1–4, 40 toggles recording, 41 clears, 42 undo
 intentionally input-only; pad LED feedback and the remaining pad assignments
 require physical-device verification.
 
+When a MIDI output whose name contains `DAW` is available, FLUX sends the
+documented DAW-mode and drum-pad takeover messages on connect. Loop-track and
+transport state is then sent as channel-10 pad note messages, throttled to state
+changes. On shutdown FLUX releases drum-pad takeover and leaves DAW mode.
+OLED text, exact palette values, and full RGB SysEx feedback remain unverified.
+
 📄 Absolute CC on channel 16 in Plugin/Mixer/Sends modes; **relative** output in
 Transport mode with pivot `40h` — `41h` is one step clockwise, `3Fh` one step
 anticlockwise. 📄 The host can also switch encoders to relative output through
