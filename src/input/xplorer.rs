@@ -85,6 +85,11 @@ impl XplorerSource {
                         thread::sleep(Duration::from_millis(250));
                         continue;
                     };
+                    // macOS may attach a generic USB driver between discovery
+                    // and claim. Let libusb detach it where the platform
+                    // supports that operation; on platforms that do not,
+                    // claim_interface below reports the real error.
+                    let _ = handle.set_auto_detach_kernel_driver(true);
                     if let Err(err) = handle.claim_interface(INTERFACE) {
                         log::warn!("could not claim X-plorer interface {INTERFACE}: {err}");
                         worker_state.store(ERROR, Ordering::Relaxed);
