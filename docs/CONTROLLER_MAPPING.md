@@ -191,6 +191,9 @@ reports can be read and physical control acceptance remains open. Observed IN
 endpoint `0x81`, max packet size 32 bytes; the reader is prepared for 32-byte
 reports.
 
+The Diagnostics panel distinguishes this permission failure from an unplugged
+guitar, so reconnect attempts remain visible without reading the terminal.
+
 ❓ Which report byte carries which fret, and which axis is whammy versus tilt.
 These are **not guessed**. The setup wizard diffs incoming reports while the user
 presses each control in turn, which also covers units that deviate from the

@@ -49,6 +49,7 @@ pub struct XplorerSource {
     last_report: Arc<AtomicU64>,
     last_bytes: Arc<AtomicU64>,
     changed_mask: Arc<AtomicU64>,
+    claim_denied: Arc<AtomicBool>,
     running: Arc<AtomicBool>,
     worker: Option<JoinHandle<()>>,
 }
@@ -60,12 +61,14 @@ impl XplorerSource {
         let last_report = Arc::new(AtomicU64::new(0));
         let last_bytes = Arc::new(AtomicU64::new(0));
         let changed_mask = Arc::new(AtomicU64::new(0));
+        let claim_denied = Arc::new(AtomicBool::new(false));
         let running = Arc::new(AtomicBool::new(true));
         let worker_state = Arc::clone(&state);
         let worker_reports = Arc::clone(&reports);
         let worker_last_report = Arc::clone(&last_report);
         let worker_last_bytes = Arc::clone(&last_bytes);
         let worker_changed_mask = Arc::clone(&changed_mask);
+        let worker_claim_denied = Arc::clone(&claim_denied);
         let worker_running = Arc::clone(&running);
         let worker = thread::Builder::new()
             .name("flux-xplorer-usb".into())
@@ -110,10 +113,13 @@ impl XplorerSource {
                         } else {
                             log::debug!("could not claim X-plorer interface {INTERFACE}: {err}");
                         }
+                        worker_claim_denied
+                            .store(matches!(err, rusb::Error::Access), Ordering::Relaxed);
                         thread::sleep(Duration::from_millis(500));
                         continue;
                     }
                     worker_state.store(CONNECTED, Ordering::Relaxed);
+                    worker_claim_denied.store(false, Ordering::Relaxed);
                     worker_last_report.store(0, Ordering::Relaxed);
                     worker_last_bytes.store(0, Ordering::Relaxed);
                     worker_changed_mask.store(0, Ordering::Relaxed);
@@ -178,6 +184,7 @@ impl XplorerSource {
             last_report,
             last_bytes,
             changed_mask,
+            claim_denied,
             running,
             worker,
         }
@@ -186,6 +193,9 @@ impl XplorerSource {
     pub fn status(&self) -> &'static str {
         match self.state.load(Ordering::Relaxed) {
             CONNECTED => "connected; waiting for control mapping",
+            ERROR if self.claim_denied.load(Ordering::Relaxed) => {
+                "USB access denied by macOS; see Diagnostics"
+            }
             ERROR => "USB error; see log",
             _ => "not connected",
         }
