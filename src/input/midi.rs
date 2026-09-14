@@ -205,9 +205,13 @@ impl MidiSource {
             log::warn!("MIDI input unavailable during port discovery");
             return MidiSource::default();
         };
+        // Keep the complete discovery snapshot for change detection. The
+        // connected input list below intentionally excludes output-only ports
+        // (for example Launchkey's DAW In), so comparing against it would
+        // trigger a needless reconnect every scan.
+        let discovered_ports = names.clone();
 
         let mut connections = Vec::with_capacity(names.len());
-        let mut connected = Vec::with_capacity(names.len());
         for name in names {
             let input = match MidiInput::new("FLUX MIDI input") {
                 Ok(input) => input,
@@ -249,7 +253,6 @@ impl MidiSource {
             ) {
                 Ok(connection) => {
                     log::info!("MIDI input connected: {name}");
-                    connected.push(name);
                     connections.push(connection);
                 }
                 Err(err) => log::warn!("could not connect MIDI input {name}: {err}"),
@@ -324,7 +327,7 @@ impl MidiSource {
         });
         MidiSource {
             _connections: connections,
-            ports: connected,
+            ports: discovered_ports,
             messages,
             last_message,
             outputs,
