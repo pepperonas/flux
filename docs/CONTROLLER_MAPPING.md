@@ -181,17 +181,15 @@ design — Xbox 360 controllers are vendor-specific, not HID — and it means **
 HID library can ever see this device on macOS**. FLUX reads interrupt transfers
 from interface 0 over raw USB via `rusb`. No driver or kernel extension.
 
-✅ libusb can claim interface 0. Verified 2026-09-09 with a throwaway `rusb`
-probe (outside the repository, not kept) against the physically connected unit
-on this Mac (confirmed via `ioreg -p IOUSB -l -w 0` before and after). No kernel
-driver was attached (`kernel_driver_active` → `false`, matching the
-`IOCFPlugInTypes`/generic-`IOUSBLib` observation above). `open()`,
-`claim_interface(0)` and `release_interface(0)` all returned `Ok`, with no
-`Access denied` or `Resource busy` error and no macOS permission prompt. Result
-reproduced identically across two independent runs. Observed IN endpoint
-`0x81`, max packet size 32 bytes; actual interrupt reports read back at 20
-bytes. This clears the only open question for M3 — raw USB access to this
-device from user-space on macOS works as planned.
+⚠️ The device is detected, but the current macOS session refuses
+`claim_interface(0)` with `Access denied (insufficient permissions)`. FLUX retries
+automatically and reports the state in Diagnostics; explicit and automatic
+libusb kernel-driver detachment are both attempted. A throwaway probe on
+2026-09-09 had succeeded, so this is an environment/driver state difference,
+not an untested device identifier. Until the interface can be claimed, no input
+reports can be read and physical control acceptance remains open. Observed IN
+endpoint `0x81`, max packet size 32 bytes; the reader is prepared for 32-byte
+reports.
 
 ❓ Which report byte carries which fret, and which axis is whammy versus tilt.
 These are **not guessed**. The setup wizard diffs incoming reports while the user

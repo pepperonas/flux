@@ -86,13 +86,30 @@ impl XplorerSource {
                         continue;
                     };
                     // macOS may attach a generic USB driver between discovery
-                    // and claim. Let libusb detach it where the platform
-                    // supports that operation; on platforms that do not,
-                    // claim_interface below reports the real error.
+                    // and claim. Try an explicit detach first, then enable
+                    // libusb's automatic detach for reconnects. Some macOS
+                    // versions report NotFound when no driver is attached;
+                    // that is harmless and claim_interface remains the source
+                    // of truth for access failures.
+                    if rusb::supports_detach_kernel_driver() {
+                        match handle.detach_kernel_driver(INTERFACE) {
+                            Ok(()) | Err(rusb::Error::NotFound) => {}
+                            Err(err) => {
+                                log::debug!("could not detach X-plorer kernel driver: {err}")
+                            }
+                        }
+                    }
                     let _ = handle.set_auto_detach_kernel_driver(true);
                     if let Err(err) = handle.claim_interface(INTERFACE) {
-                        log::warn!("could not claim X-plorer interface {INTERFACE}: {err}");
-                        worker_state.store(ERROR, Ordering::Relaxed);
+                        // Do not flood the log while macOS keeps ownership of
+                        // the vendor interface. The state remains visible in
+                        // Diagnostics and a new warning is emitted only after
+                        // a successful reconnect or a different state.
+                        if worker_state.swap(ERROR, Ordering::Relaxed) != ERROR {
+                            log::warn!("could not claim X-plorer interface {INTERFACE}: {err}");
+                        } else {
+                            log::debug!("could not claim X-plorer interface {INTERFACE}: {err}");
+                        }
                         thread::sleep(Duration::from_millis(500));
                         continue;
                     }
